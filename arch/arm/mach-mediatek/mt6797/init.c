@@ -22,6 +22,7 @@
 #include <linux/libfdt.h>
 #include <linux/sizes.h>
 
+#include "maxcpus.h"
 #include "ram_top.h"
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -199,12 +200,18 @@ static void gemini_setup_simplefb(void *blob)
  * not include the "mblock-*" regions that LK carved out of DRAM at runtime.
  * Copy them from the LK-provided control FDT into the kernel FDT so the kernel
  * does not reuse memory LK (or its secure world) still owns. U-Boot fixes up
- * /memory itself, and bootargs come from extlinux, so we touch neither here.
+ * /memory itself.
+ *
+ * Also keep the A72 cores (cpu@200/@201, i.e. CPU8/9) offline unless the user
+ * asked for a specific maxcpus: bringing them up without the DA9214 buck
+ * sequencing hangs the kernel. fdt_chosen() has already written the extlinux
+ * "append" line into /chosen/bootargs by the time image_setup_libfdt() calls
+ * us, so append " maxcpus=8" only when the user set no maxcpus token.
  */
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const void *lk = gd->fdt_blob;
-	int lk_rsv, dst_rsv, node;
+	int lk_rsv, dst_rsv, node, chosen;
 
 	lk_rsv = fdt_path_offset(lk, "/reserved-memory");
 	if (lk_rsv < 0)
@@ -240,6 +247,26 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 
 		fdt_setprop(blob, dst, "reg", reg, len);
 		fdt_setprop_empty(blob, dst, "no-map");
+	}
+
+	chosen = fdt_path_offset(blob, "/chosen");
+	if (chosen >= 0) {
+		const char *old = fdt_getprop(blob, chosen, "bootargs", NULL);
+
+		if (!gemini_bootargs_has_maxcpus(old)) {
+			char args[CONFIG_SYS_CBSIZE];
+			int ret;
+
+			if (old)
+				snprintf(args, sizeof(args), "%s maxcpus=8", old);
+			else
+				strcpy(args, "maxcpus=8");
+
+			ret = fdt_setprop_string(blob, chosen, "bootargs", args);
+			if (ret < 0)
+				printf("gemini: failed to set maxcpus bootarg (%d)\n",
+				       ret);
+		}
 	}
 
 #if IS_ENABLED(CONFIG_FDT_SIMPLEFB)

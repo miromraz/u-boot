@@ -76,8 +76,29 @@ Booting
 
 Power on while holding the **silver side button** to make LK boot the
 ``boot2`` partition. The U-Boot banner appears on the debug UART (UART0,
-921600 8N1). U-Boot then runs ``bootflow scan`` and boots an
+921600 8N1). U-Boot then shows a boot menu for ~3 s and, if no key is
+pressed, auto-selects the first entry (``bootflow scan``), which boots an
 ``extlinux.conf`` from the eMMC rootfs.
+
+Boot menu and hardware keys
+---------------------------
+
+The power and home keys are read from the MT6351 PMIC (TOPSTATUS register)
+through the PMIC wrapper and exposed as a keyboard, so the boot menu can be
+navigated without a serial console:
+
+* home key -> *Down* (move to the next entry)
+* power key -> *Enter* (select the highlighted entry)
+
+The menu does not wrap from the last entry back to the first, so the home key
+only moves downward; starting at the top, the two keys still reach every entry.
+
+.. note::
+
+   The physical key-to-function mapping is unverified. ``Esc(On)`` is assumed
+   to be the power key and the silver side button the home key; if that is
+   reversed on hardware, swap ``linux,code`` between the ``power`` and ``home``
+   nodes in ``arch/arm/dts/mt6797-gemini-pda.dts``.
 
 Debug UART
 ----------

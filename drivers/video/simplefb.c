@@ -52,9 +52,7 @@ static int simple_video_probe(struct udevice *dev)
 	/* The framebuffer buffer might not be mapped on some devices */
 	if (plat->base % SZ_4K)
 		log_warning("Framebuffer base %lx is not 4k aligned!\n", plat->base);
-	/* DEBUG: skipped on Gemini, fb already in the DDR mem_map */
-	if (0)
-		mmu_map_region((phys_addr_t)plat->base, (phys_addr_t)ALIGN(plat->size, SZ_4K), false);
+	mmu_map_region((phys_addr_t)plat->base, (phys_addr_t)ALIGN(plat->size, SZ_4K), false);
 #endif
 
 	video_set_flush_dcache(dev, true);
@@ -104,7 +102,6 @@ static int simple_video_probe(struct udevice *dev)
 		return -EINVAL;
 	}
 
-	gemini_crumb(0xffff80c0);	/* DEBUG pink: probe done */
 	return 0;
 }
 

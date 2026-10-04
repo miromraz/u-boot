@@ -246,10 +246,11 @@
 					compatible = "mediatek,mt6351-keys";
 
 					/*
-					 * TODO(hw-verify): Esc(On) is assumed to
-					 * be PWRKEY and the silver side button
-					 * HOMEKEY. Swap linux,code between the two
-					 * nodes if that is reversed on hardware.
+					 * Esc(On) = PWRKEY, silver side button =
+					 * HOMEKEY: matches Planet LK, which reads
+					 * the same TOPSTATUS bits (active-low) as
+					 * keys 8 and 17 to pick boot2/boot3
+					 * (app/mt_boot/mt_boot.c, mt_pmic.c).
 					 */
 					power {
 						label = "pwrkey";

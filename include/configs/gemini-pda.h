@@ -22,6 +22,12 @@
  * (button-kbd), so bootmenu can be driven with the power/home keys:
  * HOMEKEY -> KEY_DOWN (move), PWRKEY -> KEY_ENTER (select).
  *
+ * preboot: LK picks boot3 from Esc(On)+side button held at power-on
+ * (PWRKEY+HOMEKEY), so they are usually still down when U-Boot starts and
+ * PWRKEY would act as Enter (abort autoboot / select). Wait up to ~5 s
+ * (0x32 polls of 100 ms; setexpr counts in hex) for both to be released;
+ * sleep also drains the queued key events.
+ *
  * Note: bootmenu does not wrap from the last entry back to the first, so the
  * home key only moves downward. Two keys still reach every entry (start at the
  * top, move down, select), but an overshoot needs a reset to correct.
@@ -38,6 +44,10 @@
 	"fdtfile=mediatek/mt6797-gemini-pda.dtb\0" \
 	"stdout=serial,vidconsole\0" \
 	"stderr=serial,vidconsole\0" \
+	"preboot=setenv n 32; while test $n != 0; do " \
+		"if button pwrkey || button homekey; then " \
+		"setexpr n $n - 1; sleep 0.1; else setenv n 0; fi; done; " \
+		"setenv n\0" \
 	"bootmenu_0=Boot (bootflow scan)=bootflow scan\0" \
 	"bootmenu_1=U-Boot console=echo Entering U-Boot console\0" \
 	"bootmenu_2=Reset=reset\0" \

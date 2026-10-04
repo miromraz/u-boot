@@ -142,10 +142,10 @@ only moves downward; starting at the top, the two keys still reach every entry.
 
 .. note::
 
-   The physical key-to-function mapping is unverified. ``Esc(On)`` is assumed
-   to be the power key and the silver side button the home key; if that is
-   reversed on hardware, swap ``linux,code`` between the ``power`` and ``home``
-   nodes in ``arch/arm/dts/mt6797-gemini-pda.dts``.
+   ``Esc(On)`` is the PMIC power key and the silver side button the PMIC home
+   key. Planet's LK reads the same register bits to choose ``boot2``/``boot3``,
+   so both keys are usually still held when U-Boot starts; ``preboot`` waits
+   up to ~5 s for them to be released before the autoboot countdown and menu.
 
 Debug UART
 ----------

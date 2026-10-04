@@ -847,6 +847,17 @@ static const struct mtk_i2c_soc_data mt8512_soc_data = {
 	.ltiming_adjust = 0,
 };
 
+/*
+ * MT6797 (Helio X20/X25/X27) uses the same controller data as MT8173: the v1
+ * register layout with no DMA-sync quirk and no LTIMING adjust. The Gemini PDA
+ * reaches the AW9523 keyboard expander through I2C5 with this data.
+ */
+static const struct mtk_i2c_soc_data mt6797_soc_data = {
+	.regs = mt_i2c_regs_v1,
+	.dma_sync = 0,
+	.ltiming_adjust = 0,
+};
+
 static const struct dm_i2c_ops mtk_i2c_ops = {
 	.xfer		= mtk_i2c_transfer,
 	.set_bus_speed	= mtk_i2c_set_speed,
@@ -855,6 +866,12 @@ static const struct dm_i2c_ops mtk_i2c_ops = {
 
 static const struct udevice_id mtk_i2c_ids[] = {
 	{
+		.compatible = "mediatek,mt6797-i2c",
+		.data = (ulong)&mt6797_soc_data,
+	}, {
+		.compatible = "mediatek,mt6577-i2c",
+		.data = (ulong)&mt6797_soc_data,
+	}, {
 		.compatible = "mediatek,mt7622-i2c",
 		.data = (ulong)&mt76xx_soc_data,
 	}, {

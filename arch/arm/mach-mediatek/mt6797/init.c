@@ -20,6 +20,7 @@
 #include <vsprintf.h>
 #include <asm/global_data.h>
 #include <asm/system.h>
+#include <cpu_func.h>
 #include <linux/libfdt.h>
 #include <linux/sizes.h>
 
@@ -31,8 +32,31 @@ DECLARE_GLOBAL_DATA_PTR;
 /* Upper bound on reserved region bases we collect from the LK FDT. */
 #define GEMINI_MAX_RSV		32
 
+/*
+ * DEBUG (remove after bring-up): fill the whole LK framebuffer region, both
+ * OVL layers, with one colour and wait ~1 s, so the last stage reached is
+ * visible on screen without a UART. Uses CNTPCT directly so it works before
+ * U-Boot's timer is set up.
+ */
+void gemini_crumb(u32 argb)
+{
+	const ulong base = 0x7dfb0000UL, size = 0x1f90000UL;
+	u64 v = ((u64)argb << 32) | argb, *p = (u64 *)base;
+	u64 t0, t;
+
+	while ((ulong)p < base + size)
+		*p++ = v;
+	flush_dcache_range(base, base + size);
+
+	asm volatile("isb; mrs %0, cntpct_el0" : "=r"(t0));
+	do
+		asm volatile("isb; mrs %0, cntpct_el0" : "=r"(t));
+	while (t - t0 < 13000000);	/* 1 s at 13 MHz */
+}
+
 int dram_init(void)
 {
+	gemini_crumb(0xffffff00);	/* yellow */
 	return fdtdec_setup_mem_size_base();
 }
 
@@ -127,6 +151,7 @@ phys_addr_t board_get_usable_ram_top(phys_size_t total_size)
 int board_fdt_blob_setup(void **fdtp)
 {
 	struct fdt_header *fdt;
+	gemini_crumb(0xffff0000);	/* red */
 
 	fdt = (struct fdt_header *)get_prev_bl_fdt_addr();
 	if (fdt && !fdt_check_header(fdt)) {

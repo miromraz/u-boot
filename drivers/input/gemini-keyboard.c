@@ -24,6 +24,7 @@
 #include <keyboard.h>
 #include <key_matrix.h>
 #include <stdio_dev.h>
+#include <time.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
 
@@ -40,10 +41,15 @@
 
 #define KBD_REPEAT_DELAY_MS	250
 #define KBD_REPEAT_RATE_MS	40
+#define KBD_SCAN_INTERVAL_MS	20	/* min gap between I2C matrix scans */
 
 struct gemini_kbd_priv {
 	struct input_config *input;
 	struct key_matrix matrix;
+	unsigned long last_scan_ms;	/* get_timer() stamp of last scan */
+	bool scanned;			/* at least one scan has happened */
+	int ncodes;			/* cached decoded keycodes count */
+	int keycodes[GEMINI_MAX_KEYS];	/* cached decoded keycodes */
 };
 
 /*
@@ -74,8 +80,20 @@ static int gemini_kbd_check(struct input_config *input)
 	struct udevice *dev = input->dev;
 	struct gemini_kbd_priv *priv = dev_get_priv(dev);
 	struct key_matrix_key keys[GEMINI_MAX_KEYS];
-	int keycodes[GEMINI_MAX_KEYS];
-	int nkeys = 0, ncodes, col, ret;
+	int nkeys = 0, col, ret;
+
+	/*
+	 * A full scan is ~14 I2C transfers. fastboot/ums poll ctrlc() (and thus
+	 * tstc() -> this check) in a tight loop, so limit the matrix to one scan
+	 * per KBD_SCAN_INTERVAL_MS and replay the cached keycodes in between.
+	 */
+	if (priv->scanned &&
+	    get_timer(priv->last_scan_ms) < KBD_SCAN_INTERVAL_MS) {
+		input_send_keycodes(input, priv->keycodes, priv->ncodes);
+		return 1;
+	}
+	priv->last_scan_ms = get_timer(0);
+	priv->scanned = true;
 
 	for (col = 0; col < priv->matrix.num_cols; col++) {
 		/* Drive the selected column low, all other columns high. */
@@ -92,9 +110,9 @@ static int gemini_kbd_check(struct input_config *input)
 					keys, nkeys, GEMINI_MAX_KEYS);
 	}
 
-	ncodes = key_matrix_decode(&priv->matrix, keys, nkeys, keycodes,
-				   GEMINI_MAX_KEYS);
-	input_send_keycodes(input, keycodes, ncodes);
+	priv->ncodes = key_matrix_decode(&priv->matrix, keys, nkeys,
+					 priv->keycodes, GEMINI_MAX_KEYS);
+	input_send_keycodes(input, priv->keycodes, priv->ncodes);
 
 	return 1;
 }

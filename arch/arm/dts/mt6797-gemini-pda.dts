@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device tree for the Planet Computers Gemini PDA (MediaTek MT6797),
+ * used as U-Boot's control device tree only.
+ *
+ * This blob is appended to the boot image. The vendor LK bootloader rewrites
+ * /memory, patches every CPU node's clock-frequency and adds its "mblock-*"
+ * reserved-memory regions before handing it back to U-Boot in x0. The Linux
+ * kernel loads its own, full device tree from the rootfs, so this tree only
+ * needs to describe what U-Boot itself drives: the debug UART and the eMMC.
+ *
+ * It is deliberately self-contained (no SoC .dtsi include): there is no clock,
+ * pinctrl or power-domain driver for MT6797 in U-Boot, so clocks are modelled
+ * as fixed-clocks and pins/regulators are left as LK configured them.
+ */
+
+/dts-v1/;
+
+/ {
+	model = "Planet Computers Gemini PDA";
+	compatible = "planet,gemini-pda", "mediatek,mt6797";
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	aliases {
+		serial0 = &uart0;
+		mmc0 = &mmc0;
+	};
+
+	chosen {
+		stdout-path = "serial0:921600n8";
+	};
+
+	/*
+	 * LK's target_fdt_cpus() iterates the CPU nodes and bails out on the
+	 * first one that is missing clock-frequency, so all ten must carry it.
+	 * The values are nominal; LK clamps them to each cluster's maximum.
+	 */
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x0>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x1>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@2 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x2>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@3 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x3>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@100 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x100>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@101 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x101>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@102 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x102>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@103 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x103>;
+			clock-frequency = <1400000000>;
+		};
+
+		cpu@200 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a72";
+			reg = <0x200>;
+			clock-frequency = <2500000000>;
+		};
+
+		cpu@201 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a72";
+			reg = <0x201>;
+			clock-frequency = <2500000000>;
+		};
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		/* Placeholder; LK rewrites /memory with the real banks. */
+		reg = <0 0x40000000 1 0>;
+	};
+
+	/*
+	 * MSDC0 (eMMC) source clocks. There is no MT6797 clock driver in U-Boot,
+	 * so model them as fixed-clocks that LK has already enabled. 200 MHz is
+	 * the vendor MSDC50_0 source rate; the controller is capped to 25 MHz
+	 * (max-frequency below), which the divider derives from this.
+	 */
+	msdc0_src: clock-msdc0-src {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <200000000>;
+	};
+
+	msdc0_hclk: clock-msdc0-hclk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <200000000>;
+	};
+
+	soc {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		uart0: serial@11002000 {
+			compatible = "mediatek,mt6577-uart";
+			reg = <0 0x11002000 0 0x400>;
+			/*
+			 * No clocks phandle: serial_mtk falls back to this
+			 * fixed rate (the 26 MHz UART baud clock LK leaves on).
+			 */
+			clock-frequency = <26000000>;
+			status = "okay";
+		};
+
+		mmc0: mmc@11230000 {
+			compatible = "mediatek,mt6797-mmc";
+			reg = <0 0x11230000 0 0x10000>;
+			clocks = <&msdc0_src>, <&msdc0_hclk>;
+			clock-names = "source", "hclk";
+			bus-width = <8>;
+			max-frequency = <25000000>;
+			cap-mmc-highspeed;
+			non-removable;
+			no-sd;
+			no-sdio;
+			status = "okay";
+		};
+
+		watchdog@10007000 {
+			/* LK leaves the RGU watchdog running (10 s timeout). */
+			compatible = "mediatek,mt6589-wdt";
+			reg = <0 0x10007000 0 0x100>;
+		};
+	};
+};

@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * U-Boot specific additions for the Gemini PDA control device tree.
+ *
+ * Tag the console path so the serial driver binds before relocation and the
+ * U-Boot banner appears as early as possible.
+ */
+
+/ {
+	chosen {
+		bootph-all;
+	};
+
+	soc {
+		bootph-all;
+
+		serial@11002000 {
+			bootph-all;
+		};
+	};
+};

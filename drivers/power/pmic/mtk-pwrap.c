@@ -18,6 +18,8 @@
 #include <power/mt6359.h>
 #include <time.h>
 
+void gemini_crumb(u32 argb);	/* DEBUG */
+
 static const struct pmic_child_info mt6357_pmic_children_info[] = {
 	{ .prefix = "buck", .driver = MT6357_REGULATOR_DRIVER },
 	{ .prefix = "ldo", .driver = MT6357_REGULATOR_DRIVER },
@@ -739,6 +741,7 @@ static int mtk_pwrap_find_slave(const struct pwrap_slv_type **slave, ofnode pmic
 
 static int mtk_pwrap_probe(struct udevice *dev)
 {
+	int __maybe_unused dbg_crumb = (gemini_crumb(0xffff00ff), 0); /* DEBUG magenta */
 	struct pmic_wrapper *wrp = dev_get_priv(dev);
 	ofnode pmic_node;
 	u32 mask_done;

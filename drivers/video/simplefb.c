@@ -12,8 +12,11 @@
 #include <asm/system.h>
 #include <linux/sizes.h>
 
+void gemini_crumb(u32 argb);	/* DEBUG */
+
 static int simple_video_probe(struct udevice *dev)
 {
+	int __maybe_unused dbg_crumb = (gemini_crumb(0xff8b4513), 0); /* DEBUG brown */
 	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
 	struct video_priv *uc_priv = dev_get_uclass_priv(dev);
 	ofnode node = dev_ofnode(dev);

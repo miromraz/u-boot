@@ -24,6 +24,8 @@
 #include <linux/iopoll.h>
 #include <linux/printk.h>
 
+void gemini_crumb(u32 argb);	/* DEBUG */
+
 /* MSDC_CFG */
 #define MSDC_CFG_HS400_CK_MODE_EXT	BIT(22)
 #define MSDC_CFG_CKMOD_EXT		GENMASK(21, 20)
@@ -1736,6 +1738,7 @@ static void msdc_ungate_clock(struct msdc_host *host)
 
 static int msdc_drv_probe(struct udevice *dev)
 {
+	int __maybe_unused dbg_crumb = (gemini_crumb(0xff00ffff), 0); /* DEBUG cyan */
 	struct mmc_uclass_priv *upriv = dev_get_uclass_priv(dev);
 	struct msdc_plat *plat = dev_get_plat(dev);
 	struct msdc_host *host = dev_get_priv(dev);

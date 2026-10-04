@@ -3,6 +3,7 @@
  * Board support for the Planet Computers Gemini PDA (MediaTek MT6797).
  */
 
+#include <cpu_func.h>
 #include <init.h>
 #include <asm/global_data.h>
 #include <linux/libfdt.h>
@@ -50,12 +51,46 @@ static void gemini_fixup_fb_base(void)
 	reg[3] = old[3];
 	fdt_setprop_inplace(fdt, fb, "reg", reg, sizeof(reg));
 }
+
+/*
+ * LK leaves a second OVL layer enabled with per-pixel alpha, scanning out
+ * the buffer that follows the first frame (fb + 0x908000 on this unit). It
+ * sits above U-Boot's layer, so zero everything past the first frame,
+ * making it transparent, before the video console starts.
+ */
+static void gemini_clear_upper_layers(void)
+{
+	const void *fdt = gd->fdt_blob;
+	const fdt32_t *reg, *stride, *height;
+	ulong base, size, frame;
+	int fb;
+
+	fb = fdt_node_offset_by_compatible(fdt, -1, "simple-framebuffer");
+	if (fb < 0)
+		return;
+
+	reg = fdt_getprop(fdt, fb, "reg", NULL);
+	stride = fdt_getprop(fdt, fb, "stride", NULL);
+	height = fdt_getprop(fdt, fb, "height", NULL);
+	if (!reg || !stride || !height)
+		return;
+
+	base = ((u64)fdt32_to_cpu(reg[0]) << 32) | fdt32_to_cpu(reg[1]);
+	size = ((u64)fdt32_to_cpu(reg[2]) << 32) | fdt32_to_cpu(reg[3]);
+	frame = (ulong)fdt32_to_cpu(*stride) * fdt32_to_cpu(*height);
+	if (frame >= size)
+		return;
+
+	memset((void *)(base + frame), 0, size - frame);
+	flush_dcache_range(base + frame, base + size);
+}
 #endif
 
 int board_init(void)
 {
 #if IS_ENABLED(CONFIG_VIDEO_SIMPLE)
 	gemini_fixup_fb_base();
+	gemini_clear_upper_layers();
 #endif
 	return 0;
 }

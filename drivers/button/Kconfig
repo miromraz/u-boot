@@ -48,4 +48,14 @@ config BUTTON_QCOM_PMIC
 	  on Qualcomm SoCs. These will be configured as the Enter and Down keys
 	  respectively, allowing navigation of bootmenu with buttons on device.
 
+config BUTTON_MTK_PMIC_KEYS
+	bool "MediaTek PMIC keys"
+	depends on BUTTON
+	depends on DM_PMIC
+	help
+	  Enable support for the power and home keys wired to a MediaTek PMIC
+	  (e.g. MT6351 reached through the PMIC wrapper on MT6797). Their state
+	  is read from the PMIC TOPSTATUS register and exposed as buttons, so
+	  bootmenu can be navigated with the device's hardware keys.
+
 endmenu

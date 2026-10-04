@@ -48,6 +48,12 @@
 		height = <2160>;
 		stride = <4352>;
 		format = "a8r8g8b8";
+		/*
+		 * Panel is portrait, mounted for landscape (Android
+		 * ro.sf.hwrotation=270). rot=3 matches the hardware-verified
+		 * fbcon=rotate:3 from the mainline Gemini project.
+		 */
+		rot = <3>;
 		status = "okay";
 	};
 

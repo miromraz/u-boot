@@ -16,6 +16,8 @@
 
 /dts-v1/;
 
+#include <dt-bindings/input/input.h>
+
 / {
 	model = "Planet Computers Gemini PDA";
 	compatible = "planet,gemini-pda", "mediatek,mt6797";
@@ -180,6 +182,21 @@
 		clock-frequency = <200000000>;
 	};
 
+	/*
+	 * I2C5 source clock. There is no MT6797 clock driver in U-Boot, so model
+	 * it as a fixed-clock LK has already enabled. The mtk_i2c driver divides
+	 * this by 4 to get its reference, and the vendor (3.18) MT6797 I2C driver
+	 * uses an effective 15.6 MHz source, so 62.4 MHz reproduces that and
+	 * yields a ~100 kHz SCL (the driver always clamps to <= clock-frequency).
+	 * TODO(hw-verify): confirm the I2C5 source rate; if it is higher the bus
+	 * only runs slower, which the AW9523 tolerates.
+	 */
+	i2c5_clk: clock-i2c5 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <62400000>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -211,6 +228,125 @@
 			no-sd;
 			no-sdio;
 			status = "okay";
+		};
+
+		/*
+		 * PMIC wrapper -> MT6351 PMIC. LK has already configured PWRAP,
+		 * the PMIC and the pins, so U-Boot only reads the power/home key
+		 * state (TOPSTATUS) over WACS2; it does not re-init the wrapper.
+		 */
+		pwrap: pwrap@1000d000 {
+			compatible = "mediatek,mt6797-pwrap";
+			reg = <0 0x1000d000 0 0x1000>;
+
+			pmic {
+				compatible = "mediatek,mt6351";
+
+				keys {
+					compatible = "mediatek,mt6351-keys";
+
+					/*
+					 * TODO(hw-verify): Esc(On) is assumed to
+					 * be PWRKEY and the silver side button
+					 * HOMEKEY. Swap linux,code between the two
+					 * nodes if that is reversed on hardware.
+					 */
+					power {
+						label = "pwrkey";
+						linux,code = <KEY_ENTER>;
+						mediatek,key-mask = <0x2>;
+					};
+
+					home {
+						label = "homekey";
+						linux,code = <KEY_DOWN>;
+						mediatek,key-mask = <0x4>;
+					};
+				};
+			};
+		};
+
+		/*
+		 * I2C5 -> AW9523B GPIO expander (0x5b) driving the built-in
+		 * QWERTY keyboard matrix. LK muxes the I2C5 pins (GPIO240/241)
+		 * to I2C mode and leaves the expander's reset (GPIO58) as an
+		 * input, so U-Boot only needs the bus and the matrix driver.
+		 */
+		i2c5: i2c@1101c000 {
+			compatible = "mediatek,mt6797-i2c", "mediatek,mt6577-i2c";
+			reg = <0 0x1101c000 0 0x1000>,
+			      <0 0x11000380 0 0x80>;
+			clocks = <&i2c5_clk>, <&i2c5_clk>;
+			clock-names = "main", "dma";
+			clock-frequency = <100000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			keyboard@5b {
+				compatible = "planet,gemini-keyboard";
+				reg = <0x5b>;
+				keypad,num-rows = <8>;
+				keypad,num-columns = <7>;
+				/*
+				 * 8x7 matrix, mirrored from the Linux Gemini
+				 * dts. Fn (KEY_LEFTMETA) has no U-Boot fn layer.
+				 */
+				linux,keymap = <
+					MATRIX_KEY(0, 0, KEY_1)
+					MATRIX_KEY(1, 0, KEY_U)
+					MATRIX_KEY(2, 0, KEY_S)
+					MATRIX_KEY(3, 0, KEY_Z)
+					MATRIX_KEY(4, 0, KEY_COMMA)
+					MATRIX_KEY(5, 0, KEY_APOSTROPHE)
+					MATRIX_KEY(6, 0, KEY_8)
+					MATRIX_KEY(7, 0, KEY_J)
+					MATRIX_KEY(0, 1, KEY_2)
+					MATRIX_KEY(1, 1, KEY_W)
+					MATRIX_KEY(2, 1, KEY_D)
+					MATRIX_KEY(3, 1, KEY_C)
+					MATRIX_KEY(4, 1, KEY_LEFTALT)
+					MATRIX_KEY(5, 1, KEY_LEFT)
+					MATRIX_KEY(6, 1, KEY_9)
+					MATRIX_KEY(7, 1, KEY_K)
+					MATRIX_KEY(0, 2, KEY_3)
+					MATRIX_KEY(1, 2, KEY_Y)
+					MATRIX_KEY(2, 2, KEY_TAB)
+					MATRIX_KEY(3, 2, KEY_N)
+					MATRIX_KEY(4, 2, KEY_M)
+					MATRIX_KEY(5, 2, KEY_DOWN)
+					MATRIX_KEY(6, 2, KEY_BACKSPACE)
+					MATRIX_KEY(7, 2, KEY_I)
+					MATRIX_KEY(0, 3, KEY_4)
+					MATRIX_KEY(1, 3, KEY_T)
+					MATRIX_KEY(2, 3, KEY_F)
+					MATRIX_KEY(3, 3, KEY_X)
+					MATRIX_KEY(4, 3, KEY_LEFTMETA)
+					MATRIX_KEY(5, 3, KEY_RIGHTSHIFT)
+					MATRIX_KEY(6, 3, KEY_P)
+					MATRIX_KEY(0, 4, KEY_5)
+					MATRIX_KEY(1, 4, KEY_E)
+					MATRIX_KEY(2, 4, KEY_G)
+					MATRIX_KEY(3, 4, KEY_V)
+					MATRIX_KEY(4, 4, KEY_SPACE)
+					MATRIX_KEY(5, 4, KEY_UP)
+					MATRIX_KEY(6, 4, KEY_O)
+					MATRIX_KEY(0, 5, KEY_6)
+					MATRIX_KEY(1, 5, KEY_Q)
+					MATRIX_KEY(2, 5, KEY_A)
+					MATRIX_KEY(3, 5, KEY_B)
+					MATRIX_KEY(4, 5, KEY_DOT)
+					MATRIX_KEY(5, 5, KEY_RIGHT)
+					MATRIX_KEY(6, 5, KEY_ENTER)
+					MATRIX_KEY(0, 6, KEY_7)
+					MATRIX_KEY(1, 6, KEY_R)
+					MATRIX_KEY(2, 6, KEY_H)
+					MATRIX_KEY(3, 6, KEY_LEFTSHIFT)
+					MATRIX_KEY(4, 6, KEY_LEFTCTRL)
+					MATRIX_KEY(5, 6, KEY_L)
+					MATRIX_KEY(6, 6, KEY_0)
+				>;
+			};
 		};
 
 		watchdog@10007000 {

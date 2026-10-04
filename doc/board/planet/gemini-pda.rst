@@ -76,7 +76,8 @@ Booting
 
 Power on while holding the **silver side button** to make LK boot the
 ``boot2`` partition. The U-Boot banner appears on the debug UART (UART0,
-921600 8N1). U-Boot then runs ``bootflow scan`` and boots an
+921600 8N1). U-Boot then shows a boot menu for ~3 s and, if no key is
+pressed, auto-selects the first entry (``bootflow scan``), which boots an
 ``extlinux.conf`` from the eMMC rootfs.
 
 USB gadget: fastboot and UMS
@@ -110,10 +111,41 @@ on ``fastboot usb 0``:
    rewrite) and whole-eMMC erase are disabled by not enabling
    ``FASTBOOT_CMD_OEM_FORMAT`` / ``FASTBOOT_MMC_USER_SUPPORT``.
 
+.. warning::
+
+   ``ums 0 mmc 0`` exposes the **whole** eMMC user area to the host,
+   including ``nvram``, ``lk`` and the GPT. The fastboot partition allowlist
+   does not apply to it. Only write to ``boot2``, ``boot3`` or ``linux``.
+
 Clocks and the forced session are marked ``TODO(hw-verify)`` in the sources:
 they are adapted from the Linux MT6797 bring-up and the bsg100 reference and
 have not yet been confirmed on this unit. ``mediatek,force-vbus`` on the
 ``ssusb`` node is an in-tree alternative if the PHY force alone is insufficient.
+
+Boot menu and hardware keys
+---------------------------
+
+The power and home keys are read from the MT6351 PMIC (TOPSTATUS register)
+through the PMIC wrapper and exposed as a keyboard, so the boot menu can be
+navigated without a serial console:
+
+* home key -> *Down* (move to the next entry)
+* power key -> *Enter* (select the highlighted entry)
+
+The built-in QWERTY keyboard (AW9523 expander on I2C5, polled 8x7 matrix) is
+also an input device, so arrow keys and Enter work too. It relies on LK
+leaving the AW9523 out of reset (``TODO(hw-verify)``); the PMIC keys work
+regardless.
+
+The menu does not wrap from the last entry back to the first, so the home key
+only moves downward; starting at the top, the two keys still reach every entry.
+
+.. note::
+
+   The physical key-to-function mapping is unverified. ``Esc(On)`` is assumed
+   to be the power key and the silver side button the home key; if that is
+   reversed on hardware, swap ``linux,code`` between the ``power`` and ``home``
+   nodes in ``arch/arm/dts/mt6797-gemini-pda.dts``.
 
 Debug UART
 ----------

@@ -209,6 +209,21 @@
 		#size-cells = <2>;
 		ranges;
 
+		/*
+		 * Required by Planet LK, not U-Boot: platform_fdt_scp()
+		 * (platform/mt6797/mt_scp.c) sets this node's status and
+		 * returns an error if no "mediatek,scp" node exists, which
+		 * boot_linux_fdt() turns into ASSERT (app/mt_boot/mt_boot.c:1226)
+		 * and an endless reboot. reg as in the vendor mt6797.dtsi.
+		 */
+		scp@10020000 {
+			compatible = "mediatek,scp";
+			reg = <0 0x10020000 0 0x80000>,
+			      <0 0x100a0000 0 0x1000>,
+			      <0 0x100a4000 0 0x1000>;
+			status = "disabled";
+		};
+
 		uart0: serial@11002000 {
 			compatible = "mediatek,mt6577-uart";
 			reg = <0 0x11002000 0 0x400>;

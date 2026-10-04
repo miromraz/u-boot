@@ -26,6 +26,7 @@
 #define WDT_MODE_EXTPOL			BIT(1)
 #define WDT_MODE_EXTEN			BIT(2)
 #define WDT_MODE_IRQ_EN			BIT(3)
+#define WDT_MODE_AUTO_RESTART		BIT(4)
 #define WDT_MODE_DUAL_EN		BIT(6)
 
 #define WDT_LENGTH_KEY			0x8
@@ -36,6 +37,21 @@
 
 struct mtk_wdt_priv {
 	void __iomem *base;
+	bool auto_restart;
+};
+
+struct mtk_wdt_data {
+	bool auto_restart;
+};
+
+/*
+ * MT6797 treats the otherwise-reserved WDT_MODE bit 4 as a boot contract with
+ * its firmware: unless it is set, a watchdog or software reset is gated on the
+ * power key instead of restarting the SoC. Set it on this SoC (see Linux commit
+ * "watchdog: mtk: normalize MT6797 restart mode"); leave other SoCs untouched.
+ */
+static const struct mtk_wdt_data mt6797_data = {
+	.auto_restart = true,
 };
 
 static int mtk_wdt_reset(struct udevice *dev)
@@ -60,6 +76,14 @@ static int mtk_wdt_stop(struct udevice *dev)
 static int mtk_wdt_expire_now(struct udevice *dev, ulong flags)
 {
 	struct mtk_wdt_priv *priv = dev_get_priv(dev);
+
+	/*
+	 * On MT6797 the software reset is gated on the power key unless
+	 * AUTO_RESTART is set, so set it before triggering SWRST.
+	 */
+	if (priv->auto_restart)
+		setbits_le32(priv->base + MTK_WDT_MODE,
+			     WDT_MODE_AUTO_RESTART | WDT_MODE_KEY);
 
 	/* Kick watchdog to prevent counter == 0 */
 	writel(WDT_RESTART_KEY, priv->base + MTK_WDT_RESTART);
@@ -108,13 +132,16 @@ static int mtk_wdt_start(struct udevice *dev, u64 timeout_ms, ulong flags)
 {
 	struct mtk_wdt_priv *priv = dev_get_priv(dev);
 
+	u32 mode = WDT_MODE_EN | WDT_MODE_KEY | WDT_MODE_EXTEN;
+
 	mtk_wdt_set_timeout(dev, timeout_ms);
 
 	mtk_wdt_reset(dev);
 
-	/* Enable watchdog reset signal */
-	setbits_le32(priv->base + MTK_WDT_MODE,
-		     WDT_MODE_EN | WDT_MODE_KEY | WDT_MODE_EXTEN);
+	/* Enable watchdog reset signal (auto-restart so a timeout reboots). */
+	if (priv->auto_restart)
+		mode |= WDT_MODE_AUTO_RESTART;
+	setbits_le32(priv->base + MTK_WDT_MODE, mode);
 
 	return 0;
 }
@@ -122,10 +149,15 @@ static int mtk_wdt_start(struct udevice *dev, u64 timeout_ms, ulong flags)
 static int mtk_wdt_probe(struct udevice *dev)
 {
 	struct mtk_wdt_priv *priv = dev_get_priv(dev);
+	const struct mtk_wdt_data *data;
 
 	priv->base = dev_read_addr_ptr(dev);
 	if (!priv->base)
 		return -ENOENT;
+
+	data = (const struct mtk_wdt_data *)dev_get_driver_data(dev);
+	if (data)
+		priv->auto_restart = data->auto_restart;
 
 	/* Clear status */
 	clrsetbits_le32(priv->base + MTK_WDT_MODE,
@@ -142,6 +174,7 @@ static const struct wdt_ops mtk_wdt_ops = {
 };
 
 static const struct udevice_id mtk_wdt_ids[] = {
+	{ .compatible = "mediatek,mt6797-wdt", .data = (ulong)&mt6797_data },
 	{ .compatible = "mediatek,wdt"},
 	{ .compatible = "mediatek,mt6589-wdt"},
 	{ .compatible = "mediatek,mt7986-wdt" },

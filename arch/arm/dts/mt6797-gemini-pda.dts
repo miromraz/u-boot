@@ -356,8 +356,13 @@
 			 * TODO(hw-verify): assumes the shipped LK was built
 			 * without LK_WDT_DISABLE (it enables the WDT in
 			 * mtk_wdt_init() otherwise).
+			 *
+			 * The mt6797-wdt compatible selects AUTO_RESTART (MODE
+			 * bit 4) so reset_cpu()'s SWRST actually restarts the SoC
+			 * instead of waiting for the power key; mt6589-wdt is kept
+			 * as the register-compatible fallback.
 			 */
-			compatible = "mediatek,mt6589-wdt";
+			compatible = "mediatek,mt6797-wdt", "mediatek,mt6589-wdt";
 			reg = <0 0x10007000 0 0x100>;
 		};
 

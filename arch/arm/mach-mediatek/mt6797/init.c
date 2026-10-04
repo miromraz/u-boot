@@ -16,6 +16,7 @@
 #include <fdtdec.h>
 #include <init.h>
 #include <video.h>
+#include <wdt.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
 #include <asm/system.h>
@@ -139,8 +140,21 @@ int board_fdt_blob_setup(void **fdtp)
 	panic("No valid FDT from LK and no built-in FDT\n");
 }
 
+/*
+ * PSCI SYSTEM_RESET hangs on this device (the mainline Gemini project sees the
+ * same), so reset through the MTK RGU watchdog instead: wdt_expire_now() drives
+ * the driver's SWRST path, which sets AUTO_RESTART so the SoC restarts rather
+ * than waiting for the power key. Both the "reset" command and "fastboot reboot"
+ * route through do_reset() -> reset_cpu(). Fall back to PSCI if the WDT is
+ * somehow unavailable.
+ */
 void reset_cpu(void)
 {
+	struct udevice *dev;
+
+	if (!uclass_first_device_err(UCLASS_WDT, &dev))
+		wdt_expire_now(dev, 0);
+
 	psci_system_reset();
 }
 

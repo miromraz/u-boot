@@ -45,6 +45,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 # kernel payload = gzip(u-boot.bin) ++ appended DTB
 gzip -c "$UBOOT_BIN" > "$WORK/u-boot.bin.gz"
+
+# LK's early DTB loader (bldr_load_dtb, app/mt_boot/mt_boot.c) reads the
+# last DTB_MAX_SIZE (512 KiB) of the kernel payload at offset
+# page_sz + kernel_sz - 512 KiB, unsigned. A payload smaller than that wraps
+# around, the read fails and LK boots without a DTB. Zero-pad the gzip stream
+# (gunzip ignores trailing bytes) so the payload is always >= 512 KiB.
+truncate -s ">524288" "$WORK/u-boot.bin.gz"
 cat "$WORK/u-boot.bin.gz" "$DTB" > "$WORK/kernel.gz-dtb"
 
 # LK still expects a ramdisk slot in a v0 image; give it a tiny dummy.

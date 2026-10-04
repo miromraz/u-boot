@@ -74,11 +74,40 @@ or, from a booted system that exposes fastboot::
 Booting
 -------
 
-Power on while holding the **silver side button** to make LK boot the
-``boot2`` partition. The U-Boot banner appears on the debug UART (UART0,
-921600 8N1). U-Boot then shows a boot menu for ~3 s and, if no key is
-pressed, auto-selects the first entry (``bootflow scan``), which boots an
-``extlinux.conf`` from the eMMC rootfs.
+Power on while holding **Esc(On)** and the **silver side button** to make LK
+boot the ``boot2`` partition. Keep both held until the U-Boot banner (or any
+screen output) appears: LK re-reads the keys several times while it loads the
+boot image (``app/mt_boot/mt_boot.c:2208-2231``), so releasing them early can
+fall back to the normal ``boot`` partition. The U-Boot banner appears on the
+debug UART (UART0, 921600 8N1). U-Boot then shows a boot menu for ~3 s and, if
+no key is pressed, auto-selects the first entry (``bootflow scan``), which boots
+an ``extlinux.conf`` from the eMMC rootfs.
+
+Any reset -- including the boot menu's **Reset** entry and ``fastboot reboot``
+-- comes back up in **stock Android**, not U-Boot, because the boot-slot keys
+are not held across the reset. Power off and repeat the key combo above to get
+back into U-Boot.
+
+extlinux.conf
+-------------
+
+U-Boot passes only the extlinux ``append`` line to Linux (not LK's command
+line). A minimal entry::
+
+   LABEL mainline
+       KERNEL /boot/Image
+       FDT /boot/mt6797-gemini-pda.dtb
+       APPEND console=ttyS0,921600n8 earlycon root=/dev/mmcblk0p... rw
+
+Use ``ttyS0`` (the mainline ``8250_mtk`` naming), not the downstream
+``ttyMT3``. Two things come from U-Boot rather than this line:
+
+* U-Boot appends ``maxcpus=8`` unless the ``append`` already sets a ``maxcpus``
+  token, to keep the A72 cores (``cpu@200``/``@201``) offline -- they need
+  DA9214 buck sequencing that U-Boot does not do, and hang the kernel otherwise.
+* The MTK RGU watchdog is left armed when Linux starts (as it is under LK), so
+  the kernel must claim it or it will reset: build with
+  ``CONFIG_MEDIATEK_WATCHDOG=y``.
 
 USB gadget: fastboot and UMS
 ----------------------------

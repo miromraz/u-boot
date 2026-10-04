@@ -49,7 +49,12 @@ static int simple_video_probe(struct udevice *dev)
 	/* The framebuffer buffer might not be mapped on some devices */
 	if (plat->base % SZ_4K)
 		log_warning("Framebuffer base %lx is not 4k aligned!\n", plat->base);
-	mmu_map_region((phys_addr_t)plat->base, (phys_addr_t)ALIGN(plat->size, SZ_4K), false);
+	/*
+	 * MT6797: the LK framebuffer already lies in the DDR mem_map, and
+	 * re-mapping it here hangs U-Boot on the Gemini PDA.
+	 */
+	if (!IS_ENABLED(CONFIG_TARGET_MT6797))
+		mmu_map_region((phys_addr_t)plat->base, (phys_addr_t)ALIGN(plat->size, SZ_4K), false);
 #endif
 
 	video_set_flush_dcache(dev, true);

@@ -118,6 +118,31 @@
 	};
 
 	/*
+	 * Static pre-LK carve-outs (CCCI/ramoops/SCP/SPM), mirrored from the
+	 * Linux DTS so U-Boot's lmb never loads images over them.
+	 */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		memory@40000000 {
+			reg = <0 0x40000000 0 0x1000>;
+			no-map;
+		};
+
+		memory@44400000 {
+			reg = <0 0x44400000 0 0x500000>;
+			no-map;
+		};
+
+		memory@46000000 {
+			reg = <0 0x46000000 0 0x400000>;
+			no-map;
+		};
+	};
+
+	/*
 	 * MSDC0 (eMMC) source clocks. There is no MT6797 clock driver in U-Boot,
 	 * so model them as fixed-clocks that LK has already enabled. 200 MHz is
 	 * the vendor MSDC50_0 source rate; the controller is capped to 25 MHz

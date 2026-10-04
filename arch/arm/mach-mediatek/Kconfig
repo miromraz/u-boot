@@ -151,6 +151,7 @@ config TARGET_MT6797
 	bool "MediaTek MT6797 SoC"
 	select ARM64
 	select LINUX_KERNEL_IMAGE_HEADER
+	select OF_BOARD_SETUP
 	select OF_HAS_PRIOR_STAGE
 	select SAVE_PREV_BL_FDT_ADDR
 	help

@@ -159,15 +159,23 @@ static void gemini_setup_simplefb(void *blob)
 	struct udevice *dev;
 	struct video_uc_plat *plat;
 	struct fdt_memory fb;
+	int ret;
 
 	if (!video_is_active())
 		return;
 
 	/* mainline mt6797 has no framebuffer node; add one (configured from
 	 * the live fb base/size). fdt_simplefb_configure_node() sets it okay.
+	 * Skip if FDT_SIMPLEFB (or another fixup) already added one, so we do
+	 * not create a duplicate simple-framebuffer node.
 	 */
-	if (fdt_node_offset_by_compatible(blob, -1, "simple-framebuffer") < 0)
-		fdt_simplefb_add_node(blob);
+	if (fdt_node_offset_by_compatible(blob, -1, "simple-framebuffer") < 0) {
+		ret = fdt_simplefb_add_node(blob);
+		if (ret) {
+			printf("gemini: simplefb node add failed (%d)\n", ret);
+			return;
+		}
+	}
 
 	/*
 	 * Reserve the real framebuffer memory. fdt_add_fb_mem_rsv() cannot: with
@@ -179,8 +187,10 @@ static void gemini_setup_simplefb(void *blob)
 	plat = dev_get_uclass_plat(dev);
 	fb.start = plat->base;
 	fb.end = plat->base + plat->size - 1;
-	fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
-				   FDTDEC_RESERVED_MEMORY_NO_MAP);
+	ret = fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
+					 FDTDEC_RESERVED_MEMORY_NO_MAP);
+	if (ret)
+		printf("gemini: framebuffer reserve failed (%d)\n", ret);
 }
 #endif
 

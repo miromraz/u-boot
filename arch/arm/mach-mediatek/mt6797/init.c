@@ -271,12 +271,14 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 			char args[CONFIG_SYS_CBSIZE];
 			int ret;
 
-			if (old)
-				snprintf(args, sizeof(args), "%s maxcpus=8", old);
+			ret = snprintf(args, sizeof(args), "%s%smaxcpus=8",
+				       old ?: "", old ? " " : "");
+			/* Never truncate the user's bootargs to fit ours. */
+			if (ret >= sizeof(args))
+				ret = -FDT_ERR_NOSPACE;
 			else
-				strcpy(args, "maxcpus=8");
-
-			ret = fdt_setprop_string(blob, chosen, "bootargs", args);
+				ret = fdt_setprop_string(blob, chosen,
+							 "bootargs", args);
 			if (ret < 0)
 				printf("gemini: failed to set maxcpus bootarg (%d)\n",
 				       ret);

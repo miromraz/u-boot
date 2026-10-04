@@ -62,6 +62,16 @@ config CPCAP_POWER_BUTTON
 	help
 	  Enable support for a dedicated power button of the CPCAP PMIC.
 
+config KEYBOARD_GEMINI
+	bool "Planet Gemini PDA matrix keyboard"
+	depends on DM_KEYBOARD && DM_I2C
+	help
+	  Enable the built-in QWERTY keyboard of the Planet Gemini PDA. The
+	  8x7 key matrix is wired to an AW9523B GPIO expander on I2C5; the
+	  driver polls the matrix and decodes it with the "linux,keymap" in
+	  the device tree, so the keyboard can be used at the U-Boot console
+	  and in the boot menu.
+
 config CROS_EC_KEYB
 	bool "Enable Chrome OS EC keyboard support"
 	depends on INPUT && CROS_EC

@@ -79,6 +79,42 @@ Power on while holding the **silver side button** to make LK boot the
 921600 8N1). U-Boot then runs ``bootflow scan`` and boots an
 ``extlinux.conf`` from the eMMC rootfs.
 
+USB gadget: fastboot and UMS
+----------------------------
+
+The left USB-C port is wired to the MT6797 SSUSB/MTU3 controller, driven here
+in peripheral mode (high-speed only; the USB3 PHY is not wired). From the
+U-Boot shell::
+
+   fastboot usb 0          # host can then: fastboot flash/boot
+   ums 0 mmc 0             # expose the eMMC as USB mass storage
+
+The gadget enumerates with the Google fastboot IDs (``18d1:4ee0``). Data path,
+on ``fastboot usb 0``:
+
+* ``mtu3`` (UDC) probes and requests its three clocks;
+* the ``mediatek,mt6797-ssusb-cg`` provider ungates the infracfg SSUSB gates
+  (ICG2: sys bit 24, ref bit 9, bus bit 18) and reparents the topckgen
+  ``ssusb_top_sys`` mux to ``univpll3_d2``;
+* the T-PHY powers on and, because VBUS/session is supplied by firmware rather
+  than sensed, forces a valid B-device session
+  (``mediatek,force-b-session-valid``);
+* the device pulls up D+ and enumerates at high speed.
+
+.. warning::
+
+   ``fastboot flash``/``erase`` are restricted to an allowlist of partitions
+   (``boot2``, ``boot3``, ``linux``, ``userdata``); every other partition
+   (``preloader``, ``lk``, ``lk2``, ``nvram``, ``seccfg``, ``protect*``,
+   ``md*``, ``tee*``, ``pgpt``/``sgpt`` …) is refused. ``oem format`` (GPT
+   rewrite) and whole-eMMC erase are disabled by not enabling
+   ``FASTBOOT_CMD_OEM_FORMAT`` / ``FASTBOOT_MMC_USER_SUPPORT``.
+
+Clocks and the forced session are marked ``TODO(hw-verify)`` in the sources:
+they are adapted from the Linux MT6797 bring-up and the bsg100 reference and
+have not yet been confirmed on this unit. ``mediatek,force-vbus`` on the
+``ssusb`` node is an in-tree alternative if the PHY force alone is insufficient.
+
 Debug UART
 ----------
 

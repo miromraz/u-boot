@@ -11,6 +11,7 @@
 #include <dm.h>
 #include <part.h>
 #include <div64.h>
+#include <u-boot/schedule.h>
 #include <linux/math64.h>
 #include "mmc_private.h"
 
@@ -119,6 +120,8 @@ ulong mmc_berase(struct blk_desc *block_dev, lbaint_t start, lbaint_t blkcnt)
 	}
 
 	while (blk < blkcnt) {
+		/* Service the (LK-armed) watchdog across long erases. */
+		schedule();
 		if (IS_SD(mmc) && mmc->ssr.au) {
 			blk_r = ((blkcnt - blk) > mmc->ssr.au) ?
 				mmc->ssr.au : (blkcnt - blk);
@@ -255,6 +258,8 @@ ulong mmc_bwrite(struct blk_desc *block_dev, lbaint_t start, lbaint_t blkcnt,
 	b_max = mmc_get_b_max(mmc, (void *)src, blkcnt);
 
 	do {
+		/* Service the (LK-armed) watchdog across long writes. */
+		schedule();
 		cur = (blocks_todo > b_max) ? b_max : blocks_todo;
 		if (mmc_write_blocks(mmc, start, cur, src) != cur)
 			return 0;

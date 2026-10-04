@@ -28,8 +28,6 @@
 #include <linux/bitops.h>
 #include <linux/delay.h>
 
-void gemini_crumb(u32 argb);	/* DEBUG */
-
 /* AW9523B registers */
 #define AW9523_IN_P0		0x00	/* row inputs */
 #define AW9523_OUT_P1		0x03	/* column outputs */
@@ -145,7 +143,6 @@ static int gemini_kbd_init(struct udevice *dev)
 
 static int gemini_kbd_probe(struct udevice *dev)
 {
-	int __maybe_unused dbg_crumb = (gemini_crumb(0xffffffff), 0); /* DEBUG white */
 	struct gemini_kbd_priv *priv = dev_get_priv(dev);
 	struct keyboard_priv *uc_priv = dev_get_uclass_priv(dev);
 	struct stdio_dev *sdev = &uc_priv->sdev;

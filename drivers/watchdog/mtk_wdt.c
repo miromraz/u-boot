@@ -12,8 +12,6 @@
 #include <asm/io.h>
 #include <linux/bitops.h>
 
-void gemini_crumb(u32 argb);	/* DEBUG */
-
 #define MTK_WDT_MODE			0x00
 #define MTK_WDT_LENGTH			0x04
 #define MTK_WDT_RESTART			0x08
@@ -150,7 +148,6 @@ static int mtk_wdt_start(struct udevice *dev, u64 timeout_ms, ulong flags)
 
 static int mtk_wdt_probe(struct udevice *dev)
 {
-	int __maybe_unused dbg_crumb = (gemini_crumb(0xff808080), 0); /* DEBUG grey */
 	struct mtk_wdt_priv *priv = dev_get_priv(dev);
 	const struct mtk_wdt_data *data;
 

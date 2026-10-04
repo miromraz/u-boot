@@ -17,8 +17,6 @@
 #include <linux/delay.h>
 #include <linux/errno.h>
 
-void gemini_crumb(u32 argb);	/* DEBUG */
-
 #define I2C_RS_TRANSFER			BIT(4)
 #define I2C_HS_NACKERR			BIT(2)
 #define I2C_ACKERR			BIT(1)
@@ -784,7 +782,6 @@ static int mtk_i2c_of_to_plat(struct udevice *dev)
 
 static int mtk_i2c_probe(struct udevice *dev)
 {
-	int __maybe_unused dbg_crumb = (gemini_crumb(0xffff8000), 0); /* DEBUG orange */
 	struct mtk_i2c_priv *priv = dev_get_priv(dev);
 
 	priv->soc_data = (struct mtk_i2c_soc_data *)dev_get_driver_data(dev);

@@ -4,6 +4,7 @@ config SYS_SOC
 	default "mediatek"
 
 config SYS_VENDOR
+	default "planet" if TARGET_MT6797
 	default "mediatek"
 
 choice
@@ -146,6 +147,18 @@ config TARGET_MT8518
 	  Ethernet, IR TX/RX, I2C, I2S, S/PDIF, and built-in Wi-Fi / Bluetooth combo
 	  chip and several DDR3 and DDR4 options.
 
+config TARGET_MT6797
+	bool "MediaTek MT6797 SoC"
+	select ARM64
+	select LINUX_KERNEL_IMAGE_HEADER
+	select OF_HAS_PRIOR_STAGE
+	select SAVE_PREV_BL_FDT_ADDR
+	help
+	  The MediaTek MT6797 (Helio X20/X23/X25/X27) is an ARM64-based SoC with
+	  a deca-core tri-cluster (Cortex-A72 + 2x Cortex-A53). U-Boot runs on it
+	  as a payload chainloaded from the vendor LK bootloader, which hands over
+	  the control device tree in x0. Supports UART and eMMC (MSDC0).
+
 endchoice
 
 if ARM64
@@ -177,6 +190,7 @@ endif
 
 config SYS_BOARD
 	string "Board name"
+	default "gemini-pda" if TARGET_MT6797
 	default "mt7622" if TARGET_MT7622
 	default "mt7623" if TARGET_MT7623
 	default "mt7629" if TARGET_MT7629
@@ -195,6 +209,7 @@ config SYS_BOARD
 	  be used.
 
 config SYS_CONFIG_NAME
+	default "gemini-pda" if TARGET_MT6797
 	default "mt7623" if TARGET_MT7623
 	default "mt7629" if TARGET_MT7629
 	default "mt7981" if TARGET_MT7981
@@ -214,5 +229,8 @@ config MTK_TZ_MOVABLE
 	select ARCH_MISC_INIT
 	select OF_SYSTEM_SETUP
 	bool
+
+config LNX_KRNL_IMG_TEXT_OFFSET_BASE
+	default 0x40000000 if TARGET_MT6797
 
 endif

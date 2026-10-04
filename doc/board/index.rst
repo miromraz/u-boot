@@ -49,6 +49,7 @@ Board-specific doc
    ouya/index
    pegatron/index
    phytec/index
+   planet/index
    purism/index
    qualcomm/index
    qnap/index

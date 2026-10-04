@@ -27,7 +27,7 @@
  * top, move down, select), but an overshoot needs a reset to correct.
  */
 #define CFG_EXTRA_ENV_SETTINGS \
-	"stdin=serial,button-kbd\0" \
+	"stdin=serial,button-kbd,gemini-kbd\0" \
 	"stdout=serial\0" \
 	"stderr=serial\0" \
 	"scriptaddr=0x46800000\0" \

@@ -16,6 +16,8 @@
 
 /dts-v1/;
 
+#include <dt-bindings/input/linux-event-codes.h>
+
 / {
 	model = "Planet Computers Gemini PDA";
 	compatible = "planet,gemini-pda", "mediatek,mt6797";
@@ -193,6 +195,42 @@
 			no-sd;
 			no-sdio;
 			status = "okay";
+		};
+
+		/*
+		 * PMIC wrapper -> MT6351 PMIC. LK has already configured PWRAP,
+		 * the PMIC and the pins, so U-Boot only reads the power/home key
+		 * state (TOPSTATUS) over WACS2; it does not re-init the wrapper.
+		 */
+		pwrap: pwrap@1000d000 {
+			compatible = "mediatek,mt6797-pwrap";
+			reg = <0 0x1000d000 0 0x1000>;
+
+			pmic {
+				compatible = "mediatek,mt6351";
+
+				keys {
+					compatible = "mediatek,mt6351-keys";
+
+					/*
+					 * TODO(hw-verify): Esc(On) is assumed to
+					 * be PWRKEY and the silver side button
+					 * HOMEKEY. Swap linux,code between the two
+					 * nodes if that is reversed on hardware.
+					 */
+					power {
+						label = "pwrkey";
+						linux,code = <KEY_ENTER>;
+						mediatek,key-mask = <0x2>;
+					};
+
+					home {
+						label = "homekey";
+						linux,code = <KEY_DOWN>;
+						mediatek,key-mask = <0x4>;
+					};
+				};
+			};
 		};
 
 		watchdog@10007000 {

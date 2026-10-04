@@ -9,8 +9,6 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-void gemini_crumb(u32 argb);	/* DEBUG */
-
 #if IS_ENABLED(CONFIG_VIDEO_SIMPLE)
 /*
  * LK retains its framebuffer in DRAM and records its base in the /chosen
@@ -56,16 +54,8 @@ static void gemini_fixup_fb_base(void)
 
 int board_init(void)
 {
-	gemini_crumb(0xff00ff00);	/* green, DEBUG */
 #if IS_ENABLED(CONFIG_VIDEO_SIMPLE)
 	gemini_fixup_fb_base();
 #endif
-	return 0;
-}
-
-/* DEBUG: last breadcrumb before the console/menu. */
-int board_late_init(void)
-{
-	gemini_crumb(0xff0000ff);	/* blue */
 	return 0;
 }

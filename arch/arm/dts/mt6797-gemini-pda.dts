@@ -205,5 +205,62 @@
 			compatible = "mediatek,mt6589-wdt";
 			reg = <0 0x10007000 0 0x100>;
 		};
+
+		/*
+		 * infracfg SSUSB gates (sys/ref/bus) consumed by the MTU3
+		 * controller. A tiny control-DT-only clock provider, not a full
+		 * MT6797 clock driver (see drivers/clk/mediatek/clk-mt6797.c).
+		 * Local clock cells: 0 = sys_ck, 1 = ref_ck, 2 = mcu_ck (bus).
+		 * Its probe also reparents the topckgen ssusb_top_sys mux.
+		 */
+		usb_clk: clock-controller@10001000 {
+			compatible = "mediatek,mt6797-ssusb-cg";
+			reg = <0 0x10001000 0 0x1000>;
+			#clock-cells = <1>;
+		};
+
+		usb_phy: t-phy@11290000 {
+			compatible = "mediatek,mt6797-tphy",
+				     "mediatek,generic-tphy-v1";
+			reg = <0 0x11290000 0 0x800>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			status = "okay";
+
+			u2port0: usb-phy@11290800 {
+				reg = <0 0x11290800 0 0x100>;
+				#phy-cells = <1>;
+				/*
+				 * VBUS/session is delivered by firmware, not
+				 * sensed by the T-PHY, so force a valid B-device
+				 * session (mirrors the Linux local quirk). The
+				 * "ref" clock is the SSUSB_REF infra gate that
+				 * the MTU3 node already enables, so it is omitted
+				 * here (optional in the driver).
+				 * TODO(hw-verify): confirm it enumerates.
+				 */
+				mediatek,force-b-session-valid;
+				status = "okay";
+			};
+		};
+
+		/*
+		 * MTU3 device controller on the left USB-C port. The
+		 * "mediatek,mtu3" fallback matches U-Boot's driver. Peripheral,
+		 * high-speed only (no USB3 PHY wired). ippc is at 0x11280700.
+		 */
+		ssusb: usb@11271000 {
+			compatible = "mediatek,mt6797-mtu3", "mediatek,mtu3";
+			reg = <0 0x11271000 0 0x3000>,
+			      <0 0x11280700 0 0x100>;
+			reg-names = "mac", "ippc";
+			clocks = <&usb_clk 0>, <&usb_clk 1>, <&usb_clk 2>;
+			clock-names = "sys_ck", "ref_ck", "mcu_ck";
+			phys = <&u2port0 1>; /* PHY_TYPE_USB2 */
+			dr_mode = "peripheral";
+			maximum-speed = "high-speed";
+			status = "okay";
+		};
 	};
 };

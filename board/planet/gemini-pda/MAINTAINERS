@@ -1,8 +1,10 @@
 PLANET GEMINI PDA
 M:	Miroslav Mraz <miroslav.mraz@techmania.cz>
 S:	Maintained
+F:	arch/arm/dts/mt6797-gemini-pda.dts
 F:	arch/arm/mach-mediatek/mt6797/
 F:	board/planet/gemini-pda/
+F:	drivers/clk/mediatek/clk-mt6797.c
 F:	configs/gemini-pda_defconfig
 F:	doc/board/planet/gemini-pda.rst
 F:	include/configs/gemini-pda.h

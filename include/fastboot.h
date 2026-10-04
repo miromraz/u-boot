@@ -106,6 +106,18 @@ void fastboot_okay(const char *reason, char *response);
 int fastboot_set_reboot_flag(enum fastboot_reboot_reason reason);
 
 /**
+ * fastboot_board_flash_allowed() - board gate for "flash"/"erase".
+ *
+ * @partition: Target partition name from the fastboot command
+ * @response: Pointer to fastboot response buffer
+ *
+ * Boards may override this to restrict which partitions may be written or
+ * erased. The default (weak) implementation permits everything. Return 0 to
+ * allow the operation, or non-zero to abort it after writing a FAIL response.
+ */
+int fastboot_board_flash_allowed(const char *partition, char *response);
+
+/**
  * fastboot_set_progress_callback() - set progress callback
  *
  * @progress: Pointer to progress callback

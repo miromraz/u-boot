@@ -337,8 +337,24 @@ void fastboot_data_complete(char *response)
  * Writes the previously downloaded image to the partition indicated by
  * cmd_parameter. Writes to response.
  */
+/*
+ * fastboot_board_flash_allowed() - optional board gate for flash/erase.
+ *
+ * Boards may override this to restrict which partitions "fastboot flash" and
+ * "fastboot erase" may touch. The default permits everything, so behaviour is
+ * unchanged for boards that do not override it. A non-zero return aborts the
+ * operation; the override is responsible for setting a FAIL response.
+ */
+int __weak fastboot_board_flash_allowed(const char *partition, char *response)
+{
+	return 0;
+}
+
 static void __maybe_unused flash(char *cmd_parameter, char *response)
 {
+	if (fastboot_board_flash_allowed(cmd_parameter, response))
+		return;
+
 	if (IS_ENABLED(CONFIG_FASTBOOT_FLASH_BLOCK))
 		fastboot_block_flash_write(cmd_parameter, fastboot_buf_addr,
 					   image_size, response);
@@ -367,6 +383,9 @@ static void __maybe_unused flash(char *cmd_parameter, char *response)
  */
 static void __maybe_unused erase(char *cmd_parameter, char *response)
 {
+	if (fastboot_board_flash_allowed(cmd_parameter, response))
+		return;
+
 	if (IS_ENABLED(CONFIG_FASTBOOT_FLASH_BLOCK))
 		fastboot_block_erase(cmd_parameter, response);
 

@@ -10,6 +10,7 @@
 #include <clk.h>
 #include <dm.h>
 #include <dm/device_compat.h>
+#include <dm/lists.h>
 #include <linux/bitfield.h>
 #include <linux/err.h>
 #include <power/pmic.h>
@@ -180,6 +181,7 @@ enum pwrap_regs {
 	PWRAP_WRAP_EN,
 	PWRAP_DIO_EN,
 	PWRAP_SIDLY,
+	PWRAP_RDDMY,
 	PWRAP_CSHEXT_WRITE,
 	PWRAP_CSHEXT_READ,
 	PWRAP_CSLEXT_START,
@@ -355,6 +357,46 @@ static int mt8365_regs[] = {
 	[PWRAP_INT1_FLG] =		0xcc,
 	[PWRAP_INT1_CLR] =		0xd0,
 	[PWRAP_WDT_SRC_EN_1] =		0xf8,
+};
+
+/*
+ * MT6797 uses the legacy (non-ARB) WACS2 register layout. LK has already run
+ * the full wrapper init sequence (SPI slave reset, SIDLY, dual-IO, INIT_DONE),
+ * so this driver only ever issues WACS2 reads/writes; the init-only registers
+ * (CSLEXT, HARB, MAN_*) are kept to match the Linux table but are unused here.
+ * Ported from Linux drivers/soc/mediatek/mtk-pmic-wrap.c (mt6797_regs).
+ */
+static int mt6797_regs[] = {
+	[PWRAP_MUX_SEL] =		0x0,
+	[PWRAP_WRAP_EN] =		0x4,
+	[PWRAP_DIO_EN] =		0x8,
+	[PWRAP_SIDLY] =			0xC,
+	[PWRAP_RDDMY] =			0x10,
+	[PWRAP_CSHEXT_WRITE] =		0x18,
+	[PWRAP_CSHEXT_READ] =		0x1C,
+	[PWRAP_CSLEXT_START] =		0x20,
+	[PWRAP_CSLEXT_END] =		0x24,
+	[PWRAP_STAUPD_PRD] =		0x28,
+	[PWRAP_HARB_HPRIO] =		0x50,
+	[PWRAP_HIPRIO_ARB_EN] =		0x54,
+	[PWRAP_MAN_EN] =		0x60,
+	[PWRAP_MAN_CMD] =		0x64,
+	[PWRAP_WACS0_EN] =		0x70,
+	[PWRAP_WACS1_EN] =		0x84,
+	[PWRAP_WACS2_EN] =		0x98,
+	[PWRAP_INIT_DONE2] =		0x9C,
+	[PWRAP_WACS2_CMD] =		0xA0,
+	[PWRAP_WACS2_RDATA] =		0xA4,
+	[PWRAP_WACS2_VLDCLR] =		0xA8,
+	[PWRAP_INT_EN] =		0xC0,
+	[PWRAP_INT_FLG_RAW] =		0xC4,
+	[PWRAP_INT_FLG] =		0xC8,
+	[PWRAP_INT_CLR] =		0xCC,
+	[PWRAP_TIMER_EN] =		0xF4,
+	[PWRAP_WDT_UNIT] =		0xFC,
+	[PWRAP_WDT_SRC_EN] =		0x100,
+	[PWRAP_DCM_EN] =		0x1CC,
+	[PWRAP_DCM_DBC_PRD] =		0x1D4,
 };
 
 struct pwrap_slv_type {
@@ -657,7 +699,17 @@ static const struct pwrap_slv_type pmic_mt6359 = {
 	.caps = 0,
 };
 
+/*
+ * MT6351 (Gemini PDA). Only WACS2 register reads are used (power/home keys),
+ * never the DEW init path, so no dew_regs or slave caps are required.
+ */
+static const struct pwrap_slv_type pmic_mt6351 = {
+	.dew_regs = NULL,
+	.caps = 0,
+};
+
 static const struct udevice_id mtk_pmic_ids[] = {
+	{ .compatible = "mediatek,mt6351", .data = (ulong)&pmic_mt6351 },
 	{ .compatible = "mediatek,mt6357", .data = (ulong)&pmic_mt6357 },
 	{ .compatible = "mediatek,mt6359", .data = (ulong)&pmic_mt6359 },
 	{ }
@@ -712,11 +764,16 @@ static int mtk_pwrap_probe(struct udevice *dev)
 		return -EINVAL;
 	}
 
-	wrp->clk_spi = devm_clk_get(dev, "spi");
+	/*
+	 * Optional: SoCs with an in-U-Boot clock driver gate these, but on
+	 * MT6797 there is no clock driver (fixed-clocks) and LK has already
+	 * enabled the wrapper clocks, so a missing phandle must not fail probe.
+	 */
+	wrp->clk_spi = devm_clk_get_optional(dev, "spi");
 	if (IS_ERR(wrp->clk_spi))
 		return PTR_ERR(wrp->clk_spi);
 
-	wrp->clk_wrap = devm_clk_get(dev, "wrap");
+	wrp->clk_wrap = devm_clk_get_optional(dev, "wrap");
 	if (IS_ERR(wrp->clk_wrap))
 		return PTR_ERR(wrp->clk_wrap);
 
@@ -796,7 +853,19 @@ static int mtk_pwrap_bind(struct udevice *dev)
 		return -ENXIO;
 	}
 
-	if (ofnode_device_is_compatible(pmic_node, "mediatek,mt6357")) {
+	if (ofnode_device_is_compatible(pmic_node, "mediatek,mt6351")) {
+		/*
+		 * MT6351: no regulators are driven in U-Boot. Bind only the
+		 * "keys" child (power/home buttons) so bootmenu can be driven.
+		 * The button driver reads the PMIC through this (parent) device.
+		 */
+		ofnode keys_node = ofnode_find_subnode(pmic_node, "keys");
+
+		if (ofnode_valid(keys_node))
+			return device_bind_driver_to_node(dev, "mtk_pmic_keys",
+							  "keys", keys_node, NULL);
+		return 0;
+	} else if (ofnode_device_is_compatible(pmic_node, "mediatek,mt6357")) {
 		pmic_children_info = mt6357_pmic_children_info;
 	} else if (ofnode_device_is_compatible(pmic_node, "mediatek,mt6359")) {
 		pmic_children_info = mt6359_pmic_children_info;
@@ -881,7 +950,21 @@ static const struct pmic_wrapper_type pwrap_mt8365 = {
 	.caps = PWRAP_CAP_WDT_SRC1 | PWRAP_CAP_INIT,
 };
 
+/*
+ * MT6797: no PWRAP_CAP_INIT, so probe never re-runs the init sequence; it only
+ * confirms LK's INIT_DONE and then issues WACS2 reads. caps is deliberately 0
+ * (no ARB, no WDT_SRC rewrite) to avoid touching the live wrapper state.
+ */
+static const struct pmic_wrapper_type pwrap_mt6797 = {
+	.regs = mt6797_regs,
+	.arb_en_all = 0x01fff,
+	.spi_w = PWRAP_MAN_CMD_SPI_WRITE,
+	.wdt_src = PWRAP_WDT_SRC_MASK_ALL,
+	.caps = 0,
+};
+
 static const struct udevice_id mtk_pwrap_ids[] = {
+	{ .compatible = "mediatek,mt6797-pwrap", .data = (ulong)&pwrap_mt6797 },
 	{ .compatible = "mediatek,mt8188-pwrap", .data = (ulong)&pwrap_mt8188 },
 	{ .compatible = "mediatek,mt8189-pwrap", .data = (ulong)&pwrap_mt8189 },
 	{ .compatible = "mediatek,mt8195-pwrap", .data = (ulong)&pwrap_mt8195 },

@@ -9,10 +9,13 @@
  * We therefore use the LK-provided FDT as the control device tree.
  */
 
+#include <dm.h>
 #include <errno.h>
+#include <fdt_simplefb.h>
 #include <fdt_support.h>
 #include <fdtdec.h>
 #include <init.h>
+#include <video.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
 #include <asm/system.h>
@@ -146,6 +149,41 @@ int print_cpuinfo(void)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_FDT_SIMPLEFB)
+/*
+ * Hand the kernel an enabled simple-framebuffer node plus a reserved-memory
+ * entry for the live LK framebuffer, so Linux keeps the console U-Boot drew on.
+ */
+static void gemini_setup_simplefb(void *blob)
+{
+	struct udevice *dev;
+	struct video_uc_plat *plat;
+	struct fdt_memory fb;
+
+	if (!video_is_active())
+		return;
+
+	/* mainline mt6797 has no framebuffer node; add one (configured from
+	 * the live fb base/size). fdt_simplefb_configure_node() sets it okay.
+	 */
+	if (fdt_node_offset_by_compatible(blob, -1, "simple-framebuffer") < 0)
+		fdt_simplefb_add_node(blob);
+
+	/*
+	 * Reserve the real framebuffer memory. fdt_add_fb_mem_rsv() cannot: with
+	 * VIDEO_SIMPLE U-Boot never allocates a buffer, so gd->video_bottom ==
+	 * gd->video_top and it would reserve nothing.
+	 */
+	if (uclass_first_device_err(UCLASS_VIDEO, &dev))
+		return;
+	plat = dev_get_uclass_plat(dev);
+	fb.start = plat->base;
+	fb.end = plat->base + plat->size - 1;
+	fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
+				   FDTDEC_RESERVED_MEMORY_NO_MAP);
+}
+#endif
+
 /*
  * The kernel loads its own DTB from the rootfs, so its reserved-memory does
  * not include the "mblock-*" regions that LK carved out of DRAM at runtime.
@@ -193,6 +231,10 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		fdt_setprop(blob, dst, "reg", reg, len);
 		fdt_setprop_empty(blob, dst, "no-map");
 	}
+
+#if IS_ENABLED(CONFIG_FDT_SIMPLEFB)
+	gemini_setup_simplefb(blob);
+#endif
 
 	return 0;
 }

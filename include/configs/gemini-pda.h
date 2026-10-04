@@ -25,6 +25,8 @@
 	"kernel_comp_addr_r=0x4c000000\0" \
 	"kernel_comp_size=0x4000000\0" \
 	"ramdisk_addr_r=0x50000000\0" \
-	"fdtfile=mediatek/mt6797-gemini-pda.dtb\0"
+	"fdtfile=mediatek/mt6797-gemini-pda.dtb\0" \
+	"stdout=serial,vidconsole\0" \
+	"stderr=serial,vidconsole\0"
 
 #endif

@@ -32,6 +32,24 @@
 	};
 
 	/*
+	 * LK leaves its framebuffer live in DRAM and records its base in the
+	 * /chosen videolfb atags. These are the hardware-verified parameters
+	 * (ixoo's mainline simplefb runs on them); board_init() overwrites the
+	 * reg base from the atag at runtime, keeping this as the default.
+	 * TODO(hw-verify): base/size/stride confirmed against ixoo's
+	 * lk-simplefb.dtso; re-check if the panel or LK revision differs.
+	 */
+	framebuffer: framebuffer@7dfb0000 {
+		compatible = "simple-framebuffer";
+		reg = <0 0x7dfb0000 0 0x1f90000>;
+		width = <1080>;
+		height = <2160>;
+		stride = <4352>;
+		format = "a8r8g8b8";
+		status = "okay";
+	};
+
+	/*
 	 * LK's target_fdt_cpus() iterates the CPU nodes and bails out on the
 	 * first one that is missing clock-frequency, so all ten must carry it.
 	 * The values are nominal; LK clamps them to each cluster's maximum.

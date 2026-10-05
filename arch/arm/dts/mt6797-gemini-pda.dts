@@ -281,7 +281,7 @@
 
 					home {
 						label = "homekey";
-						linux,code = <KEY_DOWN>;
+						linux,code = <KEY_SPACE>;
 						mediatek,key-mask = <0x4>;
 					};
 				};

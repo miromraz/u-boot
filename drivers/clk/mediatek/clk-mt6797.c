@@ -18,6 +18,7 @@
  */
 
 #include <dm.h>
+#include <dm/device_compat.h>
 #include <asm/io.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
@@ -142,14 +143,13 @@ static int mt6797_ssusb_cg_probe(struct udevice *dev)
 	 */
 	ret = uclass_first_device_err(UCLASS_PMIC, &pmic);
 	if (ret) {
-		printf("BC cg: pmic not found (%d), USB PHY rails left off\n", ret);
+		dev_err(dev, "PMIC not found (%d), USB PHY rails left off\n", ret);
 	} else {
 		pmic_clrsetbits(pmic, MT6351_LDO_VUSB33_CON0, 0, MT6351_RG_VUSB33_EN);
 		pmic_clrsetbits(pmic, MT6351_LDO_VA10_CON0, 0, MT6351_RG_VA10_EN);
 		pmic_clrsetbits(pmic, MT6351_VA10_ANA_CON0, MT6351_RG_VA10_VOSEL,
 				0x1 << 8);
 		udelay(50);
-		printf("BC cg: pmic USB PHY rails on\n");
 	}
 
 	return 0;

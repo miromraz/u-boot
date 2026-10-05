@@ -18,14 +18,15 @@
  * 64 MiB to decompress an Image.gz, ramdisk after that.
  */
 /*
- * Route console input through both the UART, the PMIC hardware keys
+ * Route console input through the PMIC hardware keys
  * (button-kbd: PWRKEY/Esc -> Enter, HOMEKEY/side -> Space) and the keyboard,
- * so bootmenu can be driven with the arrow keys and Enter. board_late_init
- * waits for Esc/side to be released and drains input first, since they are
- * usually still held from LK's boot selection.
+ * so bootmenu can be driven with the arrow keys and Enter. serial is omitted
+ * because no UART is fitted and its floating RX injects phantom keypresses.
+ * board_late_init waits for Esc/side to be released and drains input first,
+ * since they are usually still held from LK's boot selection.
  */
 #define CFG_EXTRA_ENV_SETTINGS \
-	"stdin=serial,button-kbd,gemini-kbd\0" \
+	"stdin=button-kbd,gemini-kbd\0" \
 	"scriptaddr=0x46800000\0" \
 	"pxefile_addr_r=0x46900000\0" \
 	"fdt_addr_r=0x47000000\0" \

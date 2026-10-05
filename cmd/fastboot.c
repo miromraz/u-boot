@@ -82,7 +82,9 @@ static int do_fastboot_usb(int argc, char *const argv[],
 		return CMD_RET_FAILURE;
 	}
 
+	printf("BC fb: udc_get\n");
 	ret = udc_device_get_by_index(controller_index, &udc);
+	printf("BC fb: udc_get=%d\n", ret);
 	if (ret) {
 		pr_err("USB init failed: %d\n", ret);
 		return CMD_RET_FAILURE;
@@ -90,6 +92,7 @@ static int do_fastboot_usb(int argc, char *const argv[],
 
 	g_dnl_clear_detach();
 	ret = g_dnl_register("usb_dnl_fastboot");
+	printf("BC fb: g_dnl_register=%d\n", ret);
 	if (ret)
 		return ret;
 
@@ -100,6 +103,7 @@ static int do_fastboot_usb(int argc, char *const argv[],
 		goto exit;
 	}
 
+	printf("BC fb: loop\n");
 	while (1) {
 		if (g_dnl_detach())
 			break;

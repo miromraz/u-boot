@@ -89,6 +89,7 @@ static int mt6797_ssusb_cg_probe(struct udevice *dev)
 	 * This clock gate is probed when the MTU3 glue enables its clocks, which
 	 * is before the T-PHY touches any SSUSB MMIO.
 	 */
+	printf("BC cg: probe\n");
 	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON0),
 		     PLL_CON0_LTECLKSQ_EN);
 	udelay(100);

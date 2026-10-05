@@ -441,6 +441,8 @@
 			phys = <&u2port0 1>; /* PHY_TYPE_USB2 */
 			dr_mode = "peripheral";
 			maximum-speed = "high-speed";
+			/* LK forces VBUS in the MAC (U3D_MISC_CTRL = 0x3, EXT_VBUS_DET). */
+			mediatek,force-vbus;
 			status = "okay";
 		};
 	};

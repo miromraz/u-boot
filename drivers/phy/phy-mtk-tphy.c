@@ -56,6 +56,10 @@
 #define U3P_USBPHYACR2			0x008
 #define PA2_RG_U2PLL_BW			GENMASK(21, 19)
 
+#define U3P_USBPHYACR4			0x010
+#define PA4_RG_U2_DM_100K_EN		BIT(17)
+#define PA4_RG_U2_DP_100K_EN		BIT(16)
+
 #define U3P_USBPHYACR5			0x014
 #define PA5_RG_U2_HSTX_SRCAL_EN		BIT(15)
 #define PA5_RG_U2_HSTX_SRCTRL		GENMASK(14, 12)
@@ -63,6 +67,7 @@
 
 #define U3P_USBPHYACR6			0x018
 #define PA6_RG_U2_PRE_EMP		GENMASK(31, 30)
+#define PA6_RG_U2_ISO_EN		BIT(31)	/* MT6797 E60802 u2 PHY */
 #define PA6_RG_U2_BC11_SW_EN		BIT(23)
 #define PA6_RG_U2_OTG_VBUSCMP_EN	BIT(20)
 #define PA6_RG_U2_DISCTH		GENMASK(7, 4)
@@ -378,6 +383,21 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 	if (instance->force_b_session_valid)
 		setbits_le32(u2_banks->com + U3P_U2PHYDTM1,
 			     P2C_FORCE_SESS_MSK | P2C_RG_SESS_VALID_MSK);
+
+	/*
+	 * MT6797 E60802 u2 PHY: mirror LK mt_usb_phy_poweron()
+	 * (platform/mt6797/mt_usbphy.c:788-808): drop isolation and the BC1.1
+	 * path, release the DP/DM 100k pulls and route 100uA to SSUSB.
+	 */
+	if (device_is_compatible(tphy->dev, "mediatek,mt6797-tphy")) {
+		clrbits_le32(u2_banks->com + U3P_USBPHYACR6,
+			     PA6_RG_U2_ISO_EN | PA6_RG_U2_BC11_SW_EN);
+		clrbits_le32(u2_banks->com + U3P_USBPHYACR4,
+			     PA4_RG_U2_DP_100K_EN | PA4_RG_U2_DM_100K_EN);
+		setbits_le32(u2_banks->com + U3P_USBPHYACR5,
+			     PA5_RG_U2_HS_100U_U3_EN);
+		clrbits_le32(u2_banks->com + U3P_U2PHYDTM0, P2C_FORCE_SUSPENDM);
+	}
 
 	dev_dbg(tphy->dev, "%s(%d)\n", __func__, instance->index);
 }

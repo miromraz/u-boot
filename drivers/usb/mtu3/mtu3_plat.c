@@ -196,6 +196,10 @@ static int mtu3_probe(struct udevice *dev)
 		return ret;
 
 	ssusb_ip_sw_reset(ssusb);
+
+	/* MT6797: LK mu3d_hal_ssusb_en() enables all IPPC reference clocks. */
+	if (device_is_compatible(dev, "mediatek,mt6797-mtu3"))
+		mtu3_setbits(ssusb->ippc_base, U3D_SSUSB_REF_CK_CTRL, 0xf);
 	printf("BC mtu3: probe done\n");
 
 	return 0;

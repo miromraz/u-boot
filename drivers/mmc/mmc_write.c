@@ -225,6 +225,24 @@ static ulong mmc_write_blocks(struct mmc *mmc, lbaint_t start,
 	if (err)
 		return 0;
 
+	/*
+	 * Controllers that implement wait_dat0 make mmc_poll_for_busy() return
+	 * without ever issuing CMD13, so the card's R1 error bits (e.g.
+	 * WP_VIOLATION, bit 26, when writing a write-protected region) are
+	 * never inspected and a rejected write still looks like success. Read
+	 * the status once more and fail the write if any error bit is set.
+	 */
+	if (!mmc_host_is_spi(mmc)) {
+		unsigned int status;
+
+		if (mmc_send_status(mmc, &status))
+			return 0;
+		if (status & MMC_STATUS_MASK) {
+			printf("mmc write failed, status %#08x\n", status);
+			return 0;
+		}
+	}
+
 	return blkcnt;
 }
 

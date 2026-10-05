@@ -460,7 +460,6 @@ static int mtu3_gadget_pullup(struct usb_gadget *gadget, int is_on)
 	spin_lock_irqsave(&mtu->lock, flags);
 
 	is_on = !!is_on;
-	printf("BC pullup on=%d active=%d\n", is_on, mtu->is_active);
 	if (!mtu->is_active) {
 		/* save it for mtu3_start() to process the request */
 		mtu->softconnect = is_on;

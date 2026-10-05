@@ -16,6 +16,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/phy/phy.h>
 #include <dt-bindings/input/input.h>
 
 / {
@@ -438,7 +439,7 @@
 			reg-names = "mac", "ippc";
 			clocks = <&usb_clk 0>, <&usb_clk 1>, <&usb_clk 2>;
 			clock-names = "sys_ck", "ref_ck", "mcu_ck";
-			phys = <&u2port0 1>; /* PHY_TYPE_USB2 */
+			phys = <&u2port0 PHY_TYPE_USB2>;
 			dr_mode = "peripheral";
 			maximum-speed = "high-speed";
 			/* LK forces VBUS in the MAC (U3D_MISC_CTRL = 0x3, EXT_VBUS_DET). */

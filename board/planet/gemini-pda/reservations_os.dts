@@ -12,6 +12,11 @@
 		#size-cells = <2>;
 		ranges;
 
+		memory@44600000 {
+			reg = <0x0 0x44600000 0x0 0x10000>;
+			no-map;
+		};
+
 		memory@46000000 {
 			reg = <0x0 0x46000000 0x0 0x400000>;
 			no-map;

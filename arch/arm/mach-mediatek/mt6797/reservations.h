@@ -19,11 +19,13 @@
 #define __MT6797_RESERVATIONS_H
 
 /*
- * Does [start, start+size) overlap the reg of any /reserved-memory child in
+ * Is [start, start+size) fully inside the reg of one /reserved-memory child in
  * @blob? Used to skip reservations the OS DT (or an earlier copy) already
- * covers, in either form, so a region is never reserved twice.
+ * covers. Only full containment counts: skipping on mere overlap would leave
+ * the uncovered part of a larger LK region unreserved, while Linux accepts
+ * overlapping reservations (memblock_reserve/memblock_mark_nomap).
  */
-static inline bool gemini_rsv_overlaps(const void *blob, uint64_t start,
+static inline bool gemini_rsv_covered(const void *blob, uint64_t start,
 				       uint64_t size)
 {
 	int parent, node, ac, sc, stride;
@@ -54,7 +56,7 @@ static inline bool gemini_rsv_overlaps(const void *blob, uint64_t start,
 				a = (a << 32) | fdt32_to_cpu(reg[i + c]);
 			for (c = 0; c < sc; c++)
 				s = (s << 32) | fdt32_to_cpu(reg[i + ac + c]);
-			if (s && start < a + s && a < start + size)
+			if (s && start >= a && start + size <= a + s)
 				return true;
 		}
 	}
@@ -64,7 +66,7 @@ static inline bool gemini_rsv_overlaps(const void *blob, uint64_t start,
 /*
  * Copy all of @src's reservations into @dst, skipping any already present:
  *   - /reserved-memory children, verbatim (reg, no-map, reusable, compatible),
- *     skipped when @dst has a child of the same name or an overlapping region;
+ *     skipped when @dst has a child of the same name or one that covers it;
  *   - /memreserve/ entries, skipped when @dst already has an identical entry or
  *     a reserved-memory node covering the range.
  * Nodes are copied before /memreserve/ so an LK entry that duplicates a just
@@ -117,7 +119,7 @@ static inline int gemini_copy_reservations(void *dst, const void *src)
 					for (c = 0; c < ssc; c++)
 						s = (s << 32) |
 						    fdt32_to_cpu(reg[k + sac + c]);
-					if (gemini_rsv_overlaps(dst, a, s))
+					if (gemini_rsv_covered(dst, a, s))
 						skip = true;
 				}
 			}
@@ -172,7 +174,7 @@ static inline int gemini_copy_reservations(void *dst, const void *src)
 				break;
 			}
 		}
-		if (dup || gemini_rsv_overlaps(dst, addr, size))
+		if (dup || gemini_rsv_covered(dst, addr, size))
 			continue;
 
 		err = fdt_add_mem_rsv(dst, addr, size);

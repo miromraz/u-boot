@@ -122,10 +122,14 @@ int main(int argc, char **argv)
 
 	/* OS node left intact, still exactly once */
 	assert(count_node(osbuf, 0x46000000ULL, 0x400000ULL) == 1);
-	/* LK node overlapping the OS one was skipped: no dup@46000000 */
+	/* LK node covered by the OS one was skipped: no dup@46000000 */
 	assert(fdt_subnode_offset(osbuf,
 		fdt_subnode_offset(osbuf, 0, "reserved-memory"),
 		"dup@46000000") < 0);
+
+	/* partly-covered larger LK region still copied, OS node kept */
+	assert(count_node(osbuf, 0x44600000ULL, 0x200000ULL) == 1);
+	assert(count_node(osbuf, 0x44600000ULL, 0x10000ULL) == 1);
 
 	/* memreserve: LK's new entry added, the one already in OS not doubled */
 	assert(count_memrsv(osbuf, 0xb4000000ULL, 0xa000000ULL) == 1);

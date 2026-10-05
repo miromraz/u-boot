@@ -34,9 +34,16 @@
 			no-map;
 		};
 
-		/* overlaps the OS memory@46000000 node -> must be skipped */
+		/* identical to the OS memory@46000000 node (covered) -> must be skipped */
 		dup@46000000 {
 			reg = <0x0 0x46000000 0x0 0x400000>;
+			no-map;
+		};
+
+		/* larger than, and only partly covered by, the OS memory@44600000
+		 * node -> must still be copied, else 0x44610000.. stays unreserved */
+		tee@44600000 {
+			reg = <0x0 0x44600000 0x0 0x200000>;
 			no-map;
 		};
 	};

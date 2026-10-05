@@ -209,7 +209,7 @@ static void gemini_setup_simplefb(void *blob)
 	 * ft_board_setup has already propagated, and a second overlapping node
 	 * would conflict.
 	 */
-	if (gemini_rsv_overlaps(blob, fb.start, plat->size))
+	if (gemini_rsv_covered(blob, fb.start, plat->size))
 		return;
 	ret = fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
 					 FDTDEC_RESERVED_MEMORY_NO_MAP);

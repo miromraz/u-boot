@@ -409,6 +409,19 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 	if (device_is_compatible(tphy->dev, "mediatek,mt6797-tphy")) {
 		void __iomem *sif = tphy->sif_base;
 
+		/* DEBUG: does the SIF2 block take writes, and are the SSUSB gates open? */
+		printf("BC gate: CG2STA=%08x MODE=%08x\n",
+		       readl((void __iomem *)0x100010b0), readl(sif + 0x300));
+		writel(0x62910002, sif + 0x300);
+		printf("BC gate: MODE after write=%08x\n", readl(sif + 0x300));
+		if (readl(sif + 0x300) != 0x62910002) {
+			writel(BIT(24) | BIT(18) | BIT(9), (void __iomem *)0x100010ac);
+			udelay(10);
+			writel(0x62910002, sif + 0x300);
+			printf("BC gate forced: CG2STA=%08x MODE=%08x\n",
+			       readl((void __iomem *)0x100010b0), readl(sif + 0x300));
+		}
+
 		/* RG_SSUSB_VUSB10_ON=1 after VUSB10 ready (recover :930) */
 		setbits_le32(sif + MT6797_PHYA_REG1, MT6797_RG_SSUSB_VUSB10_ON);
 

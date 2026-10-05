@@ -501,11 +501,15 @@ exit:
  *     -ETIMEDOUT, i2c transfer timeout.\n
  *     -EREMOTEIO, i2c transfer ack error.
  */
+/* ponytail: one shared RX bounce buffer; longer reads fall back to direct DMA */
+static u8 mtk_i2c_rx_bounce[256] __aligned(ARCH_DMA_MINALIGN);
+
 static int mtk_i2c_do_transfer(struct mtk_i2c_priv *priv,
 			       struct i2c_msg *msgs,
 			       int num, int left_num)
 {
 	struct i2c_msg *msg_rx = NULL;
+	bool rx_bounce = false;
 	uint restart_flag = 0;
 	uint trans_error = 0;
 	uint irq_stat = 0;
@@ -600,8 +604,21 @@ static int mtk_i2c_do_transfer(struct mtk_i2c_priv *priv,
 			msg_rx = msgs;
 		}
 
+		/*
+		 * DMA RX into a cache-line aligned bounce buffer and invalidate
+		 * it after completion: callers pass small stack buffers whose
+		 * cache line stays live, so reading them directly returns stale
+		 * CPU-cached data (seen as ghost keys from the Gemini keyboard).
+		 */
+		if (msg_rx->len <= sizeof(mtk_i2c_rx_bounce)) {
+			rx_bounce = true;
+			flush_cache((ulong)mtk_i2c_rx_bounce,
+				    sizeof(mtk_i2c_rx_bounce));
+		}
+
 		/* Write the rx buffer address to dma register */
-		writel((ulong)msg_rx->buf, priv->pdmabase + REG_RX_MEM_ADDR);
+		writel(rx_bounce ? (ulong)mtk_i2c_rx_bounce : (ulong)msg_rx->buf,
+		       priv->pdmabase + REG_RX_MEM_ADDR);
 		/* Write the rx length to dma register */
 		writel(msg_rx->len, priv->pdmabase + REG_RX_LEN);
 	}
@@ -640,6 +657,13 @@ static int mtk_i2c_do_transfer(struct mtk_i2c_priv *priv,
 			tmo = true;
 			break;
 		}
+	}
+
+	if (rx_bounce) {
+		invalidate_dcache_range((ulong)mtk_i2c_rx_bounce,
+					(ulong)mtk_i2c_rx_bounce +
+					sizeof(mtk_i2c_rx_bounce));
+		memcpy(msg_rx->buf, mtk_i2c_rx_bounce, msg_rx->len);
 	}
 
 	/* clear interrupt mask */

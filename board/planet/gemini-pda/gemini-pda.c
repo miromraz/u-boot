@@ -3,12 +3,15 @@
  * Board support for the Planet Computers Gemini PDA (MediaTek MT6797).
  */
 
+#include <button.h>
+#include <console.h>
 #include <cpu_func.h>
 #include <env.h>
 #include <init.h>
 #include <mmc.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
+#include <linux/delay.h>
 #include <linux/libfdt.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -99,6 +102,39 @@ int board_init(void)
 }
 
 #if IS_ENABLED(CONFIG_BOARD_LATE_INIT)
+static bool gemini_key_held(const char *label)
+{
+	struct udevice *dev;
+
+	return !button_get_by_label(label, &dev) &&
+	       button_get_state(dev) == BUTTON_ON;
+}
+
+static void gemini_flush_input(void)
+{
+	while (tstc())
+		getchar();
+}
+
+/*
+ * Esc (PWRKEY, mapped to Enter) and the side button are usually still held
+ * from the LK power-on/boot selection when U-Boot starts. Wait up to 5 s for
+ * both to be released while draining input, then drain once more, so no stale
+ * Enter/Space reaches the boot menu.
+ */
+static void gemini_wait_keys_released(void)
+{
+	int i;
+
+	for (i = 0; i < 50 && (gemini_key_held("pwrkey") ||
+			       gemini_key_held("homekey")); i++) {
+		gemini_flush_input();
+		mdelay(100);
+	}
+	mdelay(100);
+	gemini_flush_input();
+}
+
 /*
  * Give fastboot a stable identity. "board" backs `fastboot getvar product`
  * and serial# backs both `getvar serialno` and the USB iSerial string; without
@@ -121,6 +157,8 @@ int board_late_init(void)
 			env_set("serial#", serial);
 		}
 	}
+
+	gemini_wait_keys_released();
 
 	return 0;
 }

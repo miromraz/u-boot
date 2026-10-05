@@ -92,6 +92,14 @@ void ssusb_phy_shutdown(struct ssusb_mtk *ssusb)
 	generic_phy_exit_bulk(&ssusb->phys);
 }
 
+static void ssusb_ip_sw_reset(struct ssusb_mtk *ssusb)
+{
+	/* reset whole ip (xhci & u3d) */
+	mtu3_setbits(ssusb->ippc_base, U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+	udelay(1);
+	mtu3_clrbits(ssusb->ippc_base, U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+}
+
 static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 {
 	int ret = 0;
@@ -107,6 +115,13 @@ static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 	printf("BC mtu3: clk_enable=%d, phy_setup\n", ret);
 	if (ret)
 		goto clks_err;
+
+	/*
+	 * MT6797: the IP soft reset also resets the u2 PHY registers, so it
+	 * must precede the PHY setup (LK re-applies its PHY config after reset).
+	 */
+	if (device_is_compatible(ssusb->dev, "mediatek,mt6797-mtu3"))
+		ssusb_ip_sw_reset(ssusb);
 
 	ret = ssusb_phy_setup(ssusb);
 	if (ret) {
@@ -131,13 +146,6 @@ static void ssusb_rscs_exit(struct ssusb_mtk *ssusb)
 	ssusb_phy_shutdown(ssusb);
 }
 
-static void ssusb_ip_sw_reset(struct ssusb_mtk *ssusb)
-{
-	/* reset whole ip (xhci & u3d) */
-	mtu3_setbits(ssusb->ippc_base, U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
-	udelay(1);
-	mtu3_clrbits(ssusb->ippc_base, U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
-}
 
 static int get_ssusb_rscs(struct udevice *dev, struct ssusb_mtk *ssusb)
 {
@@ -195,7 +203,8 @@ static int mtu3_probe(struct udevice *dev)
 	if (ret)
 		return ret;
 
-	ssusb_ip_sw_reset(ssusb);
+	if (!device_is_compatible(dev, "mediatek,mt6797-mtu3"))
+		ssusb_ip_sw_reset(ssusb);
 
 	/* MT6797: LK mu3d_hal_ssusb_en() enables all IPPC reference clocks. */
 	if (device_is_compatible(dev, "mediatek,mt6797-mtu3"))

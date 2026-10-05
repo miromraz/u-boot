@@ -20,6 +20,7 @@
 #include <dm.h>
 #include <asm/io.h>
 #include <linux/bitops.h>
+#include <linux/delay.h>
 
 #include "clk-mtk.h"
 
@@ -31,6 +32,20 @@
 #define TOPCKGEN_BASE		0x10000000
 #define TOP_SSUSB_TOP_SYS_SEL	0xb0
 #define SSUSB_TOP_SYS_UNIVPLL3	BIT(8)
+
+/*
+ * APMIXEDSYS USB 26 MHz reference clock, enabled by LK in
+ * enable_ssusb_xtal_clock() (platform/mt6757/mt_usbphy.c). The T-PHY has no
+ * clock of its own; without this the SSUSB PLL never locks.
+ */
+#define APMIXED_BASE			0x1000c000
+#define AP_PLL_CON0			0x0
+#define AP_PLL_CON2			0x8
+#define PLL_CON0_LTECLKSQ_EN		BIT(0)	/* RG_LTECLKSQ_EN */
+#define PLL_CON0_LTECLKSQ_LPF_EN	BIT(1)	/* RG_LTECLKSQ_LPF_EN */
+#define PLL_CON2_REF2USB_TX_EN		BIT(0)	/* DA_REF2USB_TX_EN */
+#define PLL_CON2_REF2USB_TX_LPF_EN	BIT(1)	/* DA_REF2USB_TX_LPF_EN */
+#define PLL_CON2_REF2USB_TX_OUT_EN	BIT(2)	/* DA_REF2USB_TX_OUT_EN */
 
 static const struct mtk_gate_regs infra_cg2 = {
 	.set_ofs = 0xa8,
@@ -66,6 +81,26 @@ static int mt6797_ssusb_cg_probe(struct udevice *dev)
 	ret = mtk_clk_probe(dev);
 	if (ret)
 		return ret;
+
+	/*
+	 * Enable the USB 26 MHz reference clock in APMIXEDSYS, mirroring LK's
+	 * enable_ssusb_xtal_clock(): AP_PLL_CON0 RG_LTECLKSQ_EN then (after the
+	 * PLL settles) LPF_EN, then AP_PLL_CON2 DA_REF2USB_TX_EN/_LPF_EN/_OUT_EN.
+	 * This clock gate is probed when the MTU3 glue enables its clocks, which
+	 * is before the T-PHY touches any SSUSB MMIO.
+	 */
+	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON0),
+		     PLL_CON0_LTECLKSQ_EN);
+	udelay(100);
+	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON0),
+		     PLL_CON0_LTECLKSQ_LPF_EN);
+	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON2),
+		     PLL_CON2_REF2USB_TX_EN);
+	udelay(100);
+	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON2),
+		     PLL_CON2_REF2USB_TX_LPF_EN);
+	setbits_le32((void __iomem *)(uintptr_t)(APMIXED_BASE + AP_PLL_CON2),
+		     PLL_CON2_REF2USB_TX_OUT_EN);
 
 	/*
 	 * Reparent ssusb_top_sys_sel to univpll3_d2, mirroring the Linux

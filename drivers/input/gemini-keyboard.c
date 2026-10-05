@@ -9,13 +9,11 @@
  * reads low is a pressed key at that (row, column). Decoding to key codes is
  * done with the generic key_matrix helper from the "linux,keymap" in the DT.
  *
- * LK leaves the AW9523 reset (SoC GPIO58) as an input and leaves the chip
- * running, so U-Boot only configures the expander's GPIO/direction registers
- * and never touches the reset line.
- *
- * TODO(hw-verify): the AW9523 reset is assumed to be held deasserted by LK /
- * the board (GPIO58 is left as an input); if the expander does not respond,
- * GPIO58 may need to be driven to release reset.
+ * There is no DM pinctrl/GPIO driver for MT6797 in U-Boot, so the probe pokes
+ * the SoC GPIO registers directly before the first I2C transfer: it muxes the
+ * I2C5 pads (GPIO240/241) to I2C function and pulses the AW9523 reset line
+ * (GPIO58) low then high, mirroring the vendor kernel which drives that pin.
+ * Register offsets are verified against the Linux pinctrl-mt6797 pin ranges.
  */
 
 #include <dm.h>
@@ -25,6 +23,7 @@
 #include <key_matrix.h>
 #include <stdio_dev.h>
 #include <time.h>
+#include <asm/io.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
 
@@ -33,8 +32,23 @@
 #define AW9523_OUT_P1		0x03	/* column outputs */
 #define AW9523_CONF_P0		0x04	/* direction, 1 = input */
 #define AW9523_CONF_P1		0x05
+#define AW9523_ID		0x10	/* chip ID, reads 0x23 */
 #define AW9523_LEDMODE_P0	0x12	/* per-pin, 1 = GPIO, 0 = LED */
 #define AW9523_LEDMODE_P1	0x13
+#define AW9523_ID_VALUE		0x23
+
+/*
+ * MT6797 pinctrl/GPIO MMIO, offsets verified against the pin ranges in the
+ * Linux pinctrl-mt6797 driver (gpio base 0x10005000):
+ *   mode: PIN_FIELD(0, 261, 0x300, 0x10, 0, 4) -> 8 pins/reg, 4 bits each
+ *   dir:  PIN_FIELD(0, 261, 0x0,   0x10, 0, 1) -> 32 pins/reg, 1 bit each
+ *   dout: PIN_FIELD(0, 261, 0x100, 0x10, 0, 1) -> 32 pins/reg, 1 bit each
+ */
+#define MT6797_GPIO_MODE58	0x10005370	/* GPIO58 func, bits [11:8] */
+#define MT6797_GPIO_DIR1	0x10005010	/* GPIO32..63 direction */
+#define MT6797_GPIO_DOUT1	0x10005110	/* GPIO32..63 output level */
+#define MT6797_GPIO_MODE_I2C5	0x100054e0	/* GPIO240 [3:0], 241 [7:4] */
+#define GPIO58_BIT		BIT(26)		/* GPIO58 in DIR1/DOUT1 */
 
 #define GEMINI_MAX_KEYS		8	/* simultaneous keys to decode */
 #define COL_SETTLE_US		20	/* let the column/row lines settle */
@@ -117,9 +131,36 @@ static int gemini_kbd_check(struct input_config *input)
 	return 1;
 }
 
+/*
+ * Mux the I2C5 pads to I2C function and pulse the AW9523 reset (GPIO58).
+ * Raw MMIO because U-Boot has no MT6797 pinctrl/GPIO driver. Must run before
+ * the first I2C transfer to the expander.
+ */
+static void gemini_kbd_pinmux_reset(void)
+{
+	/* GPIO240/241 -> I2C5 function (mode 1 in each 4-bit field). */
+	clrsetbits_le32((void __iomem *)(uintptr_t)MT6797_GPIO_MODE_I2C5,
+			GENMASK(7, 0), (1 << 0) | (1 << 4));
+
+	/* GPIO58 -> GPIO mode, output; pulse reset low then high. */
+	clrbits_le32((void __iomem *)(uintptr_t)MT6797_GPIO_MODE58,
+		     GENMASK(11, 8));
+	setbits_le32((void __iomem *)(uintptr_t)MT6797_GPIO_DIR1, GPIO58_BIT);
+	clrbits_le32((void __iomem *)(uintptr_t)MT6797_GPIO_DOUT1, GPIO58_BIT);
+	mdelay(1);
+	setbits_le32((void __iomem *)(uintptr_t)MT6797_GPIO_DOUT1, GPIO58_BIT);
+	mdelay(2);
+}
+
 static int gemini_kbd_init(struct udevice *dev)
 {
 	int ret;
+
+	/* Sanity-check the expander answers; non-fatal, just log a mismatch. */
+	ret = dm_i2c_reg_read(dev, AW9523_ID);
+	if (ret != AW9523_ID_VALUE)
+		printf("gemini-kbd: AW9523 ID read = %d (expected 0x%02x)\n",
+		       ret, AW9523_ID_VALUE);
 
 	/* Take both ports out of LED mode so they act as GPIOs. */
 	ret = dm_i2c_reg_write(dev, AW9523_LEDMODE_P0, 0xff);
@@ -160,6 +201,8 @@ static int gemini_kbd_probe(struct udevice *dev)
 	ret = key_matrix_decode_fdt(dev, &priv->matrix);
 	if (ret)
 		return ret;
+
+	gemini_kbd_pinmux_reset();
 
 	ret = gemini_kbd_init(dev);
 	if (ret)

@@ -124,6 +124,9 @@ static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 		ssusb_ip_sw_reset(ssusb);
 
 	ret = ssusb_phy_setup(ssusb);
+	printf("BC phy after setup: ACR6=%08x DTM0=%08x DTM1=%08x\n",
+	       readl((void __iomem *)0x11290818), readl((void __iomem *)0x11290868),
+	       readl((void __iomem *)0x1129086c));
 	if (ret) {
 		dev_err(ssusb->dev, "failed to setup phy\n");
 		goto phy_err;

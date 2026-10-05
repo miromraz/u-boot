@@ -134,7 +134,8 @@ on ``fastboot usb 0``:
 .. warning::
 
    ``fastboot flash``/``erase`` are restricted to an allowlist of partitions
-   (``boot2``, ``boot3``, ``linux``, ``userdata``); every other partition
+   (``boot``, ``boot2``, ``boot3``, ``linux``, ``userdata``; flashing a broken
+   U-Boot to ``boot`` is recovered via BROM/mtkclient); every other partition
    (``preloader``, ``lk``, ``lk2``, ``nvram``, ``seccfg``, ``protect*``,
    ``md*``, ``tee*``, ``pgpt``/``sgpt`` …) is refused. ``oem format`` (GPT
    rewrite) and whole-eMMC erase are disabled by not enabling

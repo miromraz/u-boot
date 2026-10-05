@@ -28,6 +28,7 @@
 
 /* NULL-terminated so no ARRAY_SIZE dependency in the host test. */
 static const char * const gemini_fastboot_allowlist[] = {
+	"boot",	/* U-Boot itself; recoverable via BROM/mtkclient */
 	"boot2",
 	"boot3",
 	"linux",

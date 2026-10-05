@@ -239,7 +239,7 @@ static int mtu3_gadget_handle_interrupts(struct udevice *dev)
 	static int bc_n;
 
 	/* DEBUG: dump link state every 2 s for the first 10 dumps. */
-	if (bc_n < 10 && get_timer(bc_last) > 2000) {
+	if (bc_n < 3 && get_timer(bc_last) > 2000) {
 		void __iomem *m = mtu->mac_base, *i = mtu->ippc_base;
 		void __iomem *p = (void __iomem *)0x11290800;
 

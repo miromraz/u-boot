@@ -6,10 +6,8 @@
  */
 
 #include <dm/lists.h>
-#include <dm/uclass.h>
 #include <time.h>
 #include <linux/iopoll.h>
-#include <power/pmic.h>
 
 #include "mtu3.h"
 #include "mtu3_dr.h"
@@ -126,28 +124,6 @@ static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 		ssusb_ip_sw_reset(ssusb);
 
 	ret = ssusb_phy_setup(ssusb);
-	{
-		/* DEBUG: PHY/IPPC readback plus the MT6351 USB rails (read over
-		 * the pwrap PMIC uclass) to confirm the recover sequence stuck. */
-		struct udevice *pmic;
-		int v33 = -1, va10 = -1, vosel = -1;
-
-		if (!uclass_first_device_err(UCLASS_PMIC, &pmic)) {
-			v33 = pmic_reg_read(pmic, 0x0a16);
-			va10 = pmic_reg_read(pmic, 0x0a6e);
-			vosel = pmic_reg_read(pmic, 0x0b10);
-		}
-		printf("BC phy after setup: ACR6=%08x DTM0=%08x DTM1=%08x "
-		       "MODE(300)=%08x PHYA(b00)=%08x PHYA(b04)=%08x "
-		       "VUSB33=%04x VA10=%04x VA10_ANA=%04x\n",
-		       readl((void __iomem *)0x11290818),
-		       readl((void __iomem *)0x11290868),
-		       readl((void __iomem *)0x1129086c),
-		       readl((void __iomem *)0x11290300),
-		       readl((void __iomem *)0x11290b00),
-		       readl((void __iomem *)0x11290b04),
-		       v33, va10, vosel);
-	}
 	if (ret) {
 		dev_err(ssusb->dev, "failed to setup phy\n");
 		goto phy_err;

@@ -8,11 +8,14 @@
 #include <cpu_func.h>
 #include <env.h>
 #include <init.h>
+#include <memalign.h>
 #include <mmc.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
 #include <linux/delay.h>
 #include <linux/libfdt.h>
+/* mmc_switch() is only declared in the mmc driver's private header. */
+#include "../../../drivers/mmc/mmc_private.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -136,6 +139,48 @@ static void gemini_wait_keys_released(void)
 }
 
 /*
+ * The vendor preloader/LK leaves the eMMC volatile write cache enabled, and
+ * U-Boot's mmc driver has no cache handling, so small writes (e.g. "fastboot
+ * flash boot") report OKAY but are lost from the card's cache on reset.
+ * Disable the cache on device 0: per JEDEC eMMC 5.x, turning CACHE_CTRL off
+ * forces a flush, so this both persists anything pending and makes every later
+ * U-Boot write write-through. All errors are logged and ignored, never fatal.
+ */
+static void gemini_disable_emmc_cache(void)
+{
+	ALLOC_CACHE_ALIGN_BUFFER(u8, ext_csd, MMC_MAX_BLOCK_LEN);
+	struct mmc *mmc = find_mmc_device(0);
+	u32 cache_size;
+
+	if (!mmc || mmc_init(mmc)) {
+		printf("eMMC cache: device 0 unavailable, skipping\n");
+		return;
+	}
+
+	if (mmc_send_ext_csd(mmc, ext_csd)) {
+		printf("eMMC cache: EXT_CSD read failed, skipping\n");
+		return;
+	}
+
+	cache_size = ext_csd[EXT_CSD_CACHE_SIZE] |
+		     (ext_csd[EXT_CSD_CACHE_SIZE + 1] << 8) |
+		     (ext_csd[EXT_CSD_CACHE_SIZE + 2] << 16) |
+		     (ext_csd[EXT_CSD_CACHE_SIZE + 3] << 24);
+	if (!cache_size)
+		return;		/* card has no cache, nothing to do */
+
+	printf("eMMC cache: CACHE_SIZE=%u, CACHE_CTRL=%u\n",
+	       cache_size, ext_csd[EXT_CSD_CACHE_CTRL]);
+	if (ext_csd[EXT_CSD_CACHE_CTRL] != 1)
+		return;
+
+	if (mmc_switch(mmc, EXT_CSD_CMD_SET_NORMAL, EXT_CSD_CACHE_CTRL, 0))
+		printf("eMMC cache: disable failed, writes may not persist\n");
+	else
+		printf("eMMC cache: CACHE_CTRL 1 -> 0 (flushed, write-through)\n");
+}
+
+/*
  * Give fastboot a stable identity. "board" backs `fastboot getvar product`
  * and serial# backs both `getvar serialno` and the USB iSerial string; without
  * them the host shows a blank serial and product reads "Board not set". Derive
@@ -157,6 +202,8 @@ int board_late_init(void)
 			env_set("serial#", serial);
 		}
 	}
+
+	gemini_disable_emmc_cache();
 
 	gemini_wait_keys_released();
 

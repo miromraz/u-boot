@@ -212,6 +212,7 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 /*
  * EXT_CSD fields
  */
+#define EXT_CSD_CACHE_CTRL		33	/* R/W */
 #define EXT_CSD_BOOT_SIZE_MULT_MICRON	125	/* R/W, vendor specific field */
 #define EXT_CSD_ENH_START_ADDR		136	/* R/W */
 #define EXT_CSD_ENH_SIZE_MULT		140	/* R/W */
@@ -243,6 +244,7 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define EXT_CSD_BOOT_MULT		226	/* RO */
 #define EXT_CSD_SEC_FEATURE		231	/* RO */
 #define EXT_CSD_GENERIC_CMD6_TIME       248     /* RO */
+#define EXT_CSD_CACHE_SIZE		249	/* RO, 4 bytes */
 #define EXT_CSD_BKOPS_SUPPORT		502	/* RO */
 
 /*

@@ -1,0 +1,43 @@
+/dts-v1/;
+
+/* firmware regions LK publishes as /memreserve/ header entries */
+/memreserve/ 0x00000000b4000000 0x000000000a000000;	/* modem */
+/memreserve/ 0x000000007ff80000 0x0000000000080000;	/* log-store (also in OS) */
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		trusty@be000000 {
+			compatible = "mediatek,trusty-reserved-memory";
+			reg = <0x0 0xbe000000 0x0 0xc00000>;
+			no-map;
+		};
+
+		atf-log@7ff40000 {
+			reg = <0x0 0x7ff40000 0x0 0x40000>;
+			no-map;
+		};
+
+		fb@7dfb0000 {
+			reg = <0x0 0x7dfb0000 0x0 0x1f90000>;
+			no-map;
+		};
+
+		mblock@bfa00000 {
+			reg = <0x0 0xbfa00000 0x0 0x100000>;
+			no-map;
+		};
+
+		/* overlaps the OS memory@46000000 node -> must be skipped */
+		dup@46000000 {
+			reg = <0x0 0x46000000 0x0 0x400000>;
+			no-map;
+		};
+	};
+};

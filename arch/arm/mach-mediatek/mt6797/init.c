@@ -25,6 +25,7 @@
 
 #include "maxcpus.h"
 #include "ram_top.h"
+#include "reservations.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -202,6 +203,14 @@ static void gemini_setup_simplefb(void *blob)
 	plat = dev_get_uclass_plat(dev);
 	fb.start = plat->base;
 	fb.end = plat->base + plat->size - 1;
+	/*
+	 * Skip if a copied LK reservation already covers this memory: LK keeps
+	 * its own (larger) no-map region over the framebuffer, which
+	 * ft_board_setup has already propagated, and a second overlapping node
+	 * would conflict.
+	 */
+	if (gemini_rsv_overlaps(blob, fb.start, plat->size))
+		return;
 	ret = fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
 					 FDTDEC_RESERVED_MEMORY_NO_MAP);
 	if (ret)
@@ -211,9 +220,11 @@ static void gemini_setup_simplefb(void *blob)
 
 /*
  * The kernel loads its own DTB from the rootfs, so its reserved-memory does
- * not include the "mblock-*" regions that LK carved out of DRAM at runtime.
- * Copy them from the LK-provided control FDT into the kernel FDT so the kernel
- * does not reuse memory LK (or its secure world) still owns. U-Boot fixes up
+ * not include the regions LK carved out of DRAM at runtime (TEE/ATF/modem, the
+ * retained framebuffer and firmware logs, and the "mblock-*" blocks). Copy
+ * every reservation from the LK-provided control FDT - both /memreserve/
+ * entries and /reserved-memory nodes - into the kernel FDT so the kernel does
+ * not reuse memory LK (or its secure world) still owns. U-Boot fixes up
  * /memory itself.
  *
  * Also keep the A72 cores (cpu@200/@201, i.e. CPU8/9) offline unless the user
@@ -225,43 +236,11 @@ static void gemini_setup_simplefb(void *blob)
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const void *lk = gd->fdt_blob;
-	int lk_rsv, dst_rsv, node, chosen;
+	int ret, chosen;
 
-	lk_rsv = fdt_path_offset(lk, "/reserved-memory");
-	if (lk_rsv < 0)
-		return 0;
-
-	dst_rsv = fdt_path_offset(blob, "/reserved-memory");
-	if (dst_rsv < 0) {
-		dst_rsv = fdt_add_subnode(blob, 0, "reserved-memory");
-		if (dst_rsv < 0)
-			return dst_rsv;
-		fdt_setprop_u32(blob, dst_rsv, "#address-cells", 2);
-		fdt_setprop_u32(blob, dst_rsv, "#size-cells", 2);
-		fdt_setprop_empty(blob, dst_rsv, "ranges");
-	}
-
-	fdt_for_each_subnode(node, lk, lk_rsv) {
-		const char *name = fdt_get_name(lk, node, NULL);
-		const void *reg;
-		int len, dst;
-
-		if (!name || strncmp(name, "mblock", 6))
-			continue;
-
-		reg = fdt_getprop(lk, node, "reg", &len);
-		if (!reg)
-			continue;
-
-		dst = fdt_add_subnode(blob, dst_rsv, name);
-		if (dst == -FDT_ERR_EXISTS)
-			continue;
-		if (dst < 0)
-			return dst;
-
-		fdt_setprop(blob, dst, "reg", reg, len);
-		fdt_setprop_empty(blob, dst, "no-map");
-	}
+	ret = gemini_copy_reservations(blob, lk);
+	if (ret < 0)
+		return ret;
 
 	chosen = fdt_path_offset(blob, "/chosen");
 	if (chosen >= 0) {
@@ -269,7 +248,6 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 
 		if (!gemini_bootargs_has_maxcpus(old)) {
 			char args[CONFIG_SYS_CBSIZE];
-			int ret;
 
 			ret = snprintf(args, sizeof(args), "%s%smaxcpus=8",
 				       old ?: "", old ? " " : "");

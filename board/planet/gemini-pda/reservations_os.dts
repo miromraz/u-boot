@@ -1,0 +1,20 @@
+/dts-v1/;
+
+/* already present identically in LK -> must not be duplicated */
+/memreserve/ 0x000000007ff80000 0x0000000000080000;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		memory@46000000 {
+			reg = <0x0 0x46000000 0x0 0x400000>;
+			no-map;
+		};
+	};
+};

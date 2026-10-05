@@ -355,7 +355,14 @@ u32 video_index_to_colour(struct video_priv *priv, enum colour_idx idx)
 				       (colours[idx].g << 16) |
 				       (colours[idx].b << 8) | 0xff;
 			default:
-				return (colours[idx].r << 16) |
+				/*
+				 * Opaque alpha: an X byte is ignored by most
+				 * scanout engines, but MT6797 OVL layers left
+				 * in per-pixel alpha mode by LK treat 0 as
+				 * transparent and show nothing.
+				 */
+				return 0xff000000 |
+				       (colours[idx].r << 16) |
 				       (colours[idx].g <<  8) |
 				       (colours[idx].b <<  0);
 			}

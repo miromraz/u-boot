@@ -71,14 +71,11 @@ int ssusb_phy_setup(struct ssusb_mtk *ssusb)
 	if (ret)
 		return ret;
 
-	printf("BC phy: init\n");
 	ret = generic_phy_init_bulk(phys);
-	printf("BC phy: init=%d, power_on\n", ret);
 	if (ret)
 		return ret;
 
 	ret = generic_phy_power_on_bulk(phys);
-	printf("BC phy: power_on=%d\n", ret);
 	if (ret)
 		generic_phy_exit_bulk(phys);
 
@@ -109,9 +106,7 @@ static int ssusb_rscs_init(struct ssusb_mtk *ssusb)
 		goto vusb33_err;
 	}
 
-	printf("BC mtu3: clk_enable\n");
 	ret = clk_enable_bulk(&ssusb->clks);
-	printf("BC mtu3: clk_enable=%d, phy_setup\n", ret);
 	if (ret)
 		goto clks_err;
 
@@ -191,14 +186,11 @@ static int mtu3_probe(struct udevice *dev)
 
 	ssusb->dev = dev;
 
-	printf("BC mtu3: get_rscs\n");
 	ret = get_ssusb_rscs(dev, ssusb);
-	printf("BC mtu3: get_rscs=%d\n", ret);
 	if (ret)
 		return ret;
 
 	ret = ssusb_rscs_init(ssusb);
-	printf("BC mtu3: rscs_init=%d, ip_sw_reset\n", ret);
 	if (ret)
 		return ret;
 
@@ -208,7 +200,6 @@ static int mtu3_probe(struct udevice *dev)
 	/* MT6797: LK mu3d_hal_ssusb_en() enables all IPPC reference clocks. */
 	if (device_is_compatible(dev, "mediatek,mt6797-mtu3"))
 		mtu3_setbits(ssusb->ippc_base, U3D_SSUSB_REF_CK_CTRL, 0xf);
-	printf("BC mtu3: probe done\n");
 
 	return 0;
 }

@@ -797,7 +797,6 @@ static int mtu3_hw_init(struct mtu3 *mtu)
 	u32 value;
 	int ret;
 
-	printf("BC hw_init: read vers\n");
 	value = mtu3_readl(mtu->ippc_base, U3D_SSUSB_IP_TRUNK_VERS);
 	mtu->hw_version = IP_TRUNK_VERS(value);
 	mtu->gen2cp = !!(mtu->hw_version >= MTU3_TRUNK_VERS_1003);
@@ -808,14 +807,11 @@ static int mtu3_hw_init(struct mtu3 *mtu)
 	dev_info(mtu->dev, "IP version 0x%x(%s IP)\n", mtu->hw_version,
 		 mtu->is_u3_ip ? "U3" : "U2");
 
-	printf("BC hw_init: vers=0x%x cap=0x%x, device_reset\n", mtu->hw_version, value);
 	mtu3_check_params(mtu);
 
 	mtu3_device_reset(mtu);
-	printf("BC hw_init: device_enable\n");
 
 	ret = mtu3_device_enable(mtu);
-	printf("BC hw_init: device_enable=%d\n", ret);
 	if (ret) {
 		dev_err(mtu->dev, "device enable failed %d\n", ret);
 		return ret;
@@ -825,9 +821,7 @@ static int mtu3_hw_init(struct mtu3 *mtu)
 	if (ret)
 		return ret;
 
-	printf("BC hw_init: regs_init\n");
 	mtu3_regs_init(mtu);
-	printf("BC hw_init: done\n");
 
 	return 0;
 }
@@ -857,9 +851,7 @@ int ssusb_gadget_init(struct ssusb_mtk *ssusb)
 		return ret;
 	}
 
-	printf("BC gadget_setup\n");
 	ret = mtu3_gadget_setup(mtu);
-	printf("BC gadget_setup=%d\n", ret);
 	if (ret) {
 		dev_err(dev, "mtu3 gadget init failed:%d\n", ret);
 		goto gadget_err;

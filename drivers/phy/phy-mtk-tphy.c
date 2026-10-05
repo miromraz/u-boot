@@ -241,6 +241,19 @@
 #define RG_PHY_SW_SGMII		0x2
 #define RG_PHY_SW_SATA		0x3
 
+/*
+ * MT6797 E60802 stock power-up/recover registers, as offsets from
+ * tphy->sif_base (0x11290000). Mirrors LK mt_usb_phy_recover()
+ * (platform/mt6797/mt_usbphy.c:889-1133) and mu3d_hal_ssusb_en (mt_usb.c:580);
+ * see the kernel mu3phy/mt6797/mtk-phy-asic.c recover for the same writes.
+ */
+#define MT6797_PHYA_REG1		0xb04	/* U3D_USB30_PHYA_REG1 */
+#define MT6797_RG_SSUSB_VUSB10_ON	BIT(29)	/* recover :930 */
+#define MT6797_SSUSB_MODE		0x300	/* IPPC USBMAC-mode signature */
+#define MT6797_SSUSB_MODE_USBMAC	0x62910002	/* device mode (vs 0x62910008 MDSIB) */
+#define MT6797_SSUSB_IP_SW_RST		0x30c	/* recover :1099, write 0 */
+#define MT6797_SSUSB_U3_PORT_CTRL	0x310	/* recover :1064, set [3:0] */
+
 enum mtk_phy_version {
 	MTK_TPHY_V1 = 1,
 	MTK_TPHY_V2,
@@ -385,11 +398,30 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 			     P2C_FORCE_SESS_MSK | P2C_RG_SESS_VALID_MSK);
 
 	/*
-	 * MT6797 E60802 u2 PHY: mirror LK mt_usb_phy_poweron()
-	 * (platform/mt6797/mt_usbphy.c:788-808): drop isolation and the BC1.1
-	 * path, release the DP/DM 100k pulls and route 100uA to SSUSB.
+	 * MT6797 E60802 u2 PHY: LK's savecurrent() leaves the PHY powered down,
+	 * so mirror LK mt_usb_phy_recover() (platform/mt6797/mt_usbphy.c
+	 * :889-1133) to bring it back up before the gadget attaches. The PMIC
+	 * analog rails (VUSB33/VA10) are enabled earlier in the SSUSB CG probe
+	 * (clk-mt6797.c); here we re-apply the PHY/IPPC side of recover, in the
+	 * stock order, relative to tphy->sif_base. The U2 COM-bank clears reuse
+	 * the generic poweron writes above (mt_usb_phy_poweron :788-808).
 	 */
 	if (device_is_compatible(tphy->dev, "mediatek,mt6797-tphy")) {
+		void __iomem *sif = tphy->sif_base;
+
+		/* RG_SSUSB_VUSB10_ON=1 after VUSB10 ready (recover :930) */
+		setbits_le32(sif + MT6797_PHYA_REG1, MT6797_RG_SSUSB_VUSB10_ON);
+
+		/* Route the IP into USBMAC (device) mode, then release the U3
+		 * PHYD reset / port control (mu3d_hal_ssusb_en mt_usb.c:580;
+		 * recover :1099, :1064). */
+		writel(MT6797_SSUSB_MODE_USBMAC, sif + MT6797_SSUSB_MODE);
+		writel(0, sif + MT6797_SSUSB_IP_SW_RST);
+		setbits_le32(sif + MT6797_SSUSB_U3_PORT_CTRL, 0xf);
+
+		/* Drop isolation and the BC1.1 path, release the DP/DM 100k
+		 * pulls, route 100uA to SSUSB and release force-suspendm
+		 * (recover :937, :1030, :982). */
 		clrbits_le32(u2_banks->com + U3P_USBPHYACR6,
 			     PA6_RG_U2_ISO_EN | PA6_RG_U2_BC11_SW_EN);
 		clrbits_le32(u2_banks->com + U3P_USBPHYACR4,
@@ -397,6 +429,13 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 		setbits_le32(u2_banks->com + U3P_USBPHYACR5,
 			     PA5_RG_U2_HS_100U_U3_EN);
 		clrbits_le32(u2_banks->com + U3P_U2PHYDTM0, P2C_FORCE_SUSPENDM);
+
+		/* Stock recover waits 800us for the 480MHz PLL, then asserts the
+		 * B-device session on DTM1 (recover :1129-1133). */
+		udelay(800);
+		if (instance->force_b_session_valid)
+			setbits_le32(u2_banks->com + U3P_U2PHYDTM1,
+				     P2C_FORCE_SESS_MSK | P2C_RG_SESS_VALID_MSK);
 	}
 
 	dev_dbg(tphy->dev, "%s(%d)\n", __func__, instance->index);

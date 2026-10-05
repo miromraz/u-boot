@@ -21,6 +21,7 @@
 #include <asm/io.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
+#include <power/pmic.h>
 
 #include "clk-mtk.h"
 
@@ -38,6 +39,24 @@
  * enable_ssusb_xtal_clock() (platform/mt6757/mt_usbphy.c). The T-PHY has no
  * clock of its own; without this the SSUSB PLL never locks.
  */
+/*
+ * MT6351 PMIC registers (reached over the pwrap PMIC uclass) for the LDO rails
+ * that supply the USB U2 PHY. LK's mt_usb_phy_recover()/phy_init_soc() turn
+ * these on before touching the PHY, while LK's savecurrent() leaves them off on
+ * the way out, so the PHY register bus is unclocked and T-PHY writes are
+ * dropped until they are re-enabled. This CG probe runs before the T-PHY, so it
+ * is the earliest MT6797-scoped hook. Addresses and bit fields from the stock
+ * 3.18 tree drivers/misc/mediatek/include/mt-plat/mt6797/include/mach/upmu_hw.h
+ * (VUSB33_CON0:460, RG_VUSB33_EN:6384-6386; VA10_CON0:504, RG_VA10_EN:7128-7130;
+ * VA10_ANA_CON0:585, RG_VA10_VOSEL:7992-7994).
+ */
+#define MT6351_LDO_VUSB33_CON0		0x0a16
+#define MT6351_RG_VUSB33_EN		BIT(1)
+#define MT6351_LDO_VA10_CON0		0x0a6e
+#define MT6351_RG_VA10_EN		BIT(1)
+#define MT6351_VA10_ANA_CON0		0x0b10
+#define MT6351_RG_VA10_VOSEL		GENMASK(10, 8)	/* 0x1 = 0.95V */
+
 #define APMIXED_BASE			0x1000c000
 #define AP_PLL_CON0			0x0
 #define AP_PLL_CON2			0x8
@@ -76,6 +95,7 @@ static const struct mtk_clk_tree mt6797_ssusb_cg_tree = {
 
 static int mt6797_ssusb_cg_probe(struct udevice *dev)
 {
+	struct udevice *pmic;
 	int ret;
 
 	ret = mtk_clk_probe(dev);
@@ -114,6 +134,24 @@ static int mt6797_ssusb_cg_probe(struct udevice *dev)
 	 */
 	setbits_le32((void __iomem *)(uintptr_t)(TOPCKGEN_BASE +
 			TOP_SSUSB_TOP_SYS_SEL), SSUSB_TOP_SYS_UNIVPLL3);
+
+	/*
+	 * Enable the MT6351 USB PHY rails (VUSB33, VA10 at 0.95V) and wait 50us
+	 * for them to settle, mirroring LK phy_init_soc()/mt_usb_phy_recover()
+	 * (platform/mt6797/mt_usbphy.c:507-534, :900-927). Without this the PHY
+	 * is held powered down and T-PHY register writes are dropped.
+	 */
+	ret = uclass_first_device_err(UCLASS_PMIC, &pmic);
+	if (ret) {
+		printf("BC cg: pmic not found (%d), USB PHY rails left off\n", ret);
+	} else {
+		pmic_clrsetbits(pmic, MT6351_LDO_VUSB33_CON0, 0, MT6351_RG_VUSB33_EN);
+		pmic_clrsetbits(pmic, MT6351_LDO_VA10_CON0, 0, MT6351_RG_VA10_EN);
+		pmic_clrsetbits(pmic, MT6351_VA10_ANA_CON0, MT6351_RG_VA10_VOSEL,
+				0x1 << 8);
+		udelay(50);
+		printf("BC cg: pmic USB PHY rails on\n");
+	}
 
 	return 0;
 }

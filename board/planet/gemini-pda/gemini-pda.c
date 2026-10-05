@@ -4,7 +4,10 @@
  */
 
 #include <cpu_func.h>
+#include <env.h>
 #include <init.h>
+#include <mmc.h>
+#include <vsprintf.h>
 #include <asm/global_data.h>
 #include <linux/libfdt.h>
 
@@ -94,3 +97,31 @@ int board_init(void)
 #endif
 	return 0;
 }
+
+#if IS_ENABLED(CONFIG_BOARD_LATE_INIT)
+/*
+ * Give fastboot a stable identity. "board" backs `fastboot getvar product`
+ * and serial# backs both `getvar serialno` and the USB iSerial string; without
+ * them the host shows a blank serial and product reads "Board not set". Derive
+ * serial# from the eMMC CID (device 0) so it is unique per unit and stable
+ * across boots. Only set what is not already defined in the environment.
+ */
+int board_late_init(void)
+{
+	if (!env_get("board"))
+		env_set("board", CONFIG_SYS_BOARD);
+
+	if (!env_get("serial#")) {
+		struct mmc *mmc = find_mmc_device(0);
+		char serial[17];
+
+		if (mmc && !mmc_init(mmc)) {
+			snprintf(serial, sizeof(serial), "%08x%08x",
+				 mmc->cid[2], mmc->cid[3]);
+			env_set("serial#", serial);
+		}
+	}
+
+	return 0;
+}
+#endif

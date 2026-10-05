@@ -6,6 +6,7 @@
  */
 
 #include <dm/lists.h>
+#include <time.h>
 #include <linux/iopoll.h>
 
 #include "mtu3.h"
@@ -230,6 +231,28 @@ static int mtu3_gadget_remove(struct udevice *dev)
 static int mtu3_gadget_handle_interrupts(struct udevice *dev)
 {
 	struct mtu3 *mtu = dev_get_priv(dev);
+	static ulong bc_last;
+	static int bc_n;
+
+	/* DEBUG: dump link state every 2 s for the first 10 dumps. */
+	if (bc_n < 10 && get_timer(bc_last) > 2000) {
+		void __iomem *m = mtu->mac_base, *i = mtu->ippc_base;
+		void __iomem *p = (void __iomem *)0x11290800;
+
+		bc_last = get_timer(0);
+		bc_n++;
+		printf("BC%d act=%d sc=%d spd=%d PM=%08x DC=%08x MISC=%08x CONF=%08x\n",
+		       bc_n, mtu->is_active, mtu->softconnect, mtu->speed,
+		       readl(m + U3D_POWER_MANAGEMENT), readl(m + U3D_DEVICE_CONTROL),
+		       readl(m + U3D_MISC_CTRL), readl(m + U3D_DEVICE_CONF));
+		printf("  IP c0-c3 %08x %08x %08x %08x st1 %08x st2 %08x otg %08x u2c %08x\n",
+		       readl(i + 0x0), readl(i + 0x4), readl(i + 0x8), readl(i + 0xc),
+		       readl(i + U3D_SSUSB_IP_PW_STS1), readl(i + U3D_SSUSB_IP_PW_STS2),
+		       readl(i + U3D_SSUSB_OTG_STS), readl(i + U3D_SSUSB_U2_CTRL_0P));
+		printf("  PHY 00 %08x 18 %08x 20 %08x 60 %08x 68 %08x 6c %08x 70 %08x 74 %08x\n",
+		       readl(p + 0x0), readl(p + 0x18), readl(p + 0x20), readl(p + 0x60),
+		       readl(p + 0x68), readl(p + 0x6c), readl(p + 0x70), readl(p + 0x74));
+	}
 
 	mtu3_irq(0, mtu);
 

@@ -47,8 +47,15 @@ static enum button_state_t mtk_pmic_key_get_state(struct udevice *dev)
 		return -ENODATA;
 
 	val = pmic_reg_read(priv->pmic, MT6351_TOPSTATUS);
-	if (val < 0)
-		return val;
+	if (val < 0) {
+		/*
+		 * enum button_state_t has no error value, so a negative errno
+		 * would be misread as a state change and inject a phantom key.
+		 * Report the key as released instead.
+		 */
+		log_debug("PMIC TOPSTATUS read failed: %d\n", val);
+		return BUTTON_OFF;
+	}
 
 	return mtk_pmic_key_decode(val, priv->mask);
 }

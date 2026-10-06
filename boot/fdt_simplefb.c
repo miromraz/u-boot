@@ -17,6 +17,7 @@ static int fdt_simplefb_configure_node(void *blob, int off)
 {
 	int xsize, ysize;
 	int bpix; /* log2 of bits per pixel */
+	u32 stride = 0;
 	const char *name;
 	ulong fb_base;
 	struct video_uc_plat *plat;
@@ -45,6 +46,10 @@ static int fdt_simplefb_configure_node(void *blob, int off)
 		ysize = uc_priv->ysize;
 		bpix = uc_priv->bpix;
 		fb_base = plat->base;
+		/* Honour a hardware stride set from the DT "stride" property
+		 * (e.g. width aligned up); only this knows the real pitch.
+		 */
+		stride = uc_priv->line_length;
 	}
 
 	switch (bpix) {
@@ -58,8 +63,11 @@ static int fdt_simplefb_configure_node(void *blob, int off)
 		return -EINVAL;
 	}
 
+	if (!stride)
+		stride = xsize * (1 << bpix) / 8;
+
 	return fdt_setup_simplefb_node(blob, off, fb_base, xsize, ysize,
-				       xsize * (1 << bpix) / 8, name);
+				       stride, name);
 }
 
 int fdt_simplefb_add_node(void *blob)

@@ -37,8 +37,9 @@
 	"fdtfile=mediatek/mt6797-gemini-pda.dtb\0" \
 	"stdout=serial,vidconsole\0" \
 	"stderr=serial,vidconsole\0" \
-	"bootmenu_0=Fastboot (USB)=fastboot usb 0\0" \
-	"bootmenu_1=Boot Linux (extlinux on eMMC linux part)=bootflow scan -b mmc0:29\0" \
+	"bootmenu_0=Boot Linux (extlinux on eMMC linux part)=" \
+		"bootflow scan -b mmc0:29; fastboot usb 0\0" \
+	"bootmenu_1=Fastboot (USB)=fastboot usb 0\0" \
 	"bootmenu_2=USB mass storage (expose eMMC)=ums 0 mmc 0\0" \
 	"bootmenu_3=U-Boot console=echo Entering U-Boot console\0" \
 	"bootmenu_4=Reset=reset\0"

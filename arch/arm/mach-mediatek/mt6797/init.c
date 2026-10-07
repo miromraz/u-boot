@@ -10,6 +10,7 @@
  */
 
 #include <dm.h>
+#include <env.h>
 #include <errno.h>
 #include <fdt_simplefb.h>
 #include <fdt_support.h>
@@ -241,6 +242,13 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 	ret = gemini_copy_reservations(blob, lk);
 	if (ret < 0)
 		return ret;
+
+	/* The stock Android kernel gets LK's /chosen and its own framebuffer
+	 * handling; only the Linux boot needs the maxcpus and simplefb fixups.
+	 * The "boot_android" command sets this env flag across its booti call.
+	 */
+	if (env_get("gemini_android"))
+		return 0;
 
 	chosen = fdt_path_offset(blob, "/chosen");
 	if (chosen >= 0) {

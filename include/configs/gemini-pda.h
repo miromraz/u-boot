@@ -42,6 +42,7 @@
 	"bootmenu_1=Fastboot (USB)=fastboot usb 0\0" \
 	"bootmenu_2=USB mass storage (expose eMMC)=ums 0 mmc 0\0" \
 	"bootmenu_3=U-Boot console=echo Entering U-Boot console\0" \
-	"bootmenu_4=Reset=reset\0"
+	"bootmenu_4=Android (stock kernel on eMMC boot3)=boot_android\0" \
+	"bootmenu_5=Reset=reset\0"
 
 #endif

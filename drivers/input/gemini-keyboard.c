@@ -49,6 +49,8 @@
 #define MT6797_GPIO_DOUT1	0x10005110	/* GPIO32..63 output level */
 #define MT6797_GPIO_MODE_I2C5	0x100054e0	/* GPIO240 [3:0], 241 [7:4] */
 #define GPIO58_BIT		BIT(26)		/* GPIO58 in DIR1/DOUT1 */
+#define MT6797_GPIO_DIN2	0x10005220	/* GPIO64..95 input level */
+#define GPIO66_HALL_BIT		BIT(2)		/* hall sensor, low = lid shut */
 
 #define GEMINI_MAX_KEYS		8	/* simultaneous keys to decode */
 #define COL_SETTLE_US		20	/* let the column/row lines settle */
@@ -108,6 +110,16 @@ static int gemini_kbd_check(struct input_config *input)
 	}
 	priv->last_scan_ms = get_timer(0);
 	priv->scanned = true;
+
+	/*
+	 * A shut lid presses the screen onto the keys; report nothing then so a
+	 * closed phone cannot stop the boot menu countdown.
+	 */
+	if (!(readl(MT6797_GPIO_DIN2) & GPIO66_HALL_BIT)) {
+		priv->ncodes = 0;
+		input_send_keycodes(input, priv->keycodes, 0);
+		return 1;
+	}
 
 	for (col = 0; col < priv->matrix.num_cols; col++) {
 		/* Drive the selected column low, all other columns high. */

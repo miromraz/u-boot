@@ -12,6 +12,7 @@
 #include <mmc.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
+#include <asm/io.h>
 #include <linux/delay.h>
 #include <linux/libfdt.h>
 /* mmc_switch() is only declared in the mmc driver's private header. */
@@ -102,6 +103,34 @@ int board_init(void)
 	gemini_clear_upper_layers();
 #endif
 	return 0;
+}
+
+/*
+ * LK hands control over with the display pipeline still running (DSI video
+ * mode, OVL0 -> OVL0_2L -> OVL1_2L -> RDMA0 -> DSI0), OVL0 fetching the live
+ * framebuffer through SMI/M4U. Mainline Linux power-cycles the MM power domain
+ * early in boot (mtk-pm-domains cleanup) while that DMA is still in flight; the
+ * orphaned SMI/M4U transactions then wedge every later display fetch, so
+ * mediatek-drm never completes a frame. Stop the pipeline here, right before
+ * the kernel jump, so no scanout DMA is outstanding when Linux resets MM:
+ * disable the display mutex (no new frame starts), wait for the current frame
+ * to drain, then turn the OVL and RDMA engines off.
+ *
+ * Skip it for the stock Android kernel, which takes over LK's live display and
+ * must keep it scanning out ("boot_android" sets this env flag across booti).
+ */
+void board_quiesce_devices(void)
+{
+	if (env_get("gemini_android"))
+		return;
+
+	writel(0, (void __iomem *)0x1401f020);	/* DISP MUTEX0_EN = 0 */
+	mdelay(50);
+	writel(0, (void __iomem *)0x1400b00c);	/* OVL0 EN = 0 */
+	writel(0, (void __iomem *)0x1400d00c);	/* OVL0_2L EN = 0 */
+	writel(0, (void __iomem *)0x1400e00c);	/* OVL1_2L EN = 0 */
+	writel(0, (void __iomem *)0x1400f010);	/* RDMA0 GLOBAL_CON = 0 */
+	mdelay(100);
 }
 
 #if IS_ENABLED(CONFIG_BOARD_LATE_INIT)

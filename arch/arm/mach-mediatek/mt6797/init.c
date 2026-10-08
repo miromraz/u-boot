@@ -12,11 +12,9 @@
 #include <dm.h>
 #include <env.h>
 #include <errno.h>
-#include <fdt_simplefb.h>
 #include <fdt_support.h>
 #include <fdtdec.h>
 #include <init.h>
-#include <video.h>
 #include <wdt.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
@@ -166,59 +164,6 @@ int print_cpuinfo(void)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_FDT_SIMPLEFB)
-/*
- * Hand the kernel an enabled simple-framebuffer node plus a reserved-memory
- * entry for the live LK framebuffer, so Linux keeps the console U-Boot drew on.
- */
-static void gemini_setup_simplefb(void *blob)
-{
-	struct udevice *dev;
-	struct video_uc_plat *plat;
-	struct fdt_memory fb;
-	int ret;
-
-	if (!video_is_active())
-		return;
-
-	/* mainline mt6797 has no framebuffer node; add one (configured from
-	 * the live fb base/size). fdt_simplefb_configure_node() sets it okay.
-	 * Skip if FDT_SIMPLEFB (or another fixup) already added one, so we do
-	 * not create a duplicate simple-framebuffer node.
-	 */
-	if (fdt_node_offset_by_compatible(blob, -1, "simple-framebuffer") < 0) {
-		ret = fdt_simplefb_add_node(blob);
-		if (ret) {
-			printf("gemini: simplefb node add failed (%d)\n", ret);
-			return;
-		}
-	}
-
-	/*
-	 * Reserve the real framebuffer memory. fdt_add_fb_mem_rsv() cannot: with
-	 * VIDEO_SIMPLE U-Boot never allocates a buffer, so gd->video_bottom ==
-	 * gd->video_top and it would reserve nothing.
-	 */
-	if (uclass_first_device_err(UCLASS_VIDEO, &dev))
-		return;
-	plat = dev_get_uclass_plat(dev);
-	fb.start = plat->base;
-	fb.end = plat->base + plat->size - 1;
-	/*
-	 * Skip if a copied LK reservation already covers this memory: LK keeps
-	 * its own (larger) no-map region over the framebuffer, which
-	 * ft_board_setup has already propagated, and a second overlapping node
-	 * would conflict.
-	 */
-	if (gemini_rsv_covered(blob, fb.start, plat->size))
-		return;
-	ret = fdtdec_add_reserved_memory(blob, "framebuffer", &fb, NULL, 0, NULL,
-					 FDTDEC_RESERVED_MEMORY_NO_MAP);
-	if (ret)
-		printf("gemini: framebuffer reserve failed (%d)\n", ret);
-}
-#endif
-
 /*
  * The kernel loads its own DTB from the rootfs, so its reserved-memory does
  * not include the regions LK carved out of DRAM at runtime (TEE/ATF/modem, the
@@ -244,8 +189,8 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		return ret;
 
 	/* The stock Android kernel gets LK's /chosen and its own framebuffer
-	 * handling; only the Linux boot needs the maxcpus and simplefb fixups.
-	 * The "boot_android" command sets this env flag across its booti call.
+	 * handling; only the Linux boot needs the maxcpus fixup. The
+	 * "boot_android" command sets this env flag across its booti call.
 	 */
 	if (env_get("gemini_android"))
 		return 0;
@@ -270,10 +215,6 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 				       ret);
 		}
 	}
-
-#if IS_ENABLED(CONFIG_FDT_SIMPLEFB)
-	gemini_setup_simplefb(blob);
-#endif
 
 	return 0;
 }

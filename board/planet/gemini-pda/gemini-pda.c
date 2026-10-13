@@ -7,6 +7,7 @@
 #include <console.h>
 #include <cpu_func.h>
 #include <env.h>
+#include <errno.h>
 #include <g_dnl.h>
 #include <init.h>
 #include <memalign.h>
@@ -14,8 +15,11 @@
 #include <vsprintf.h>
 #include <asm/global_data.h>
 #include <asm/io.h>
+#include <dm/uclass.h>
+#include <linux/bitops.h>
 #include <linux/delay.h>
 #include <linux/libfdt.h>
+#include <power/pmic.h>
 /* mmc_switch() is only declared in the mmc driver's private header. */
 #include "../../../drivers/mmc/mmc_private.h"
 
@@ -231,6 +235,89 @@ static void gemini_disable_emmc_cache(void)
 }
 
 /*
+ * MT6351 RTC spare bits, mirroring the kernel reboot-mode series (rtc-mt6397):
+ * on a warm reset LK inspects the always-on RTC PDN1 register to pick the boot
+ * partition. This unit's LK compiles out the FAST_BOOT (bit 13) reader
+ * (MTK_FASTBOOT_SUPPORT := no), so it is free for U-Boot - which runs after LK
+ * - to consume: "reboot bootloader" (kernel mode-bootloader = <0x2000>) sets
+ * the bit, and U-Boot enters fastboot instead of autobooting. The RTC lives in
+ * the MT6351 PMIC register space (base 0x4000), reached over PWRAP WACS2 just
+ * like the power/home keys. The pwrap read/write ops move a full 16-bit WACS2
+ * word regardless of the PMIC uclass transfer length, so pmic_reg_read()/
+ * pmic_reg_write() carry all of PDN1 (including bit 13).
+ */
+#define MT6351_RTC_BBPU		0x4000	/* RTC base + RTC_BBPU (0x00) */
+#define RTC_BBPU_CBUSY		BIT(6)
+#define MT6351_RTC_PDN1		0x402c	/* RTC base + RTC_PDN1 (0x2c) */
+#define RTC_PDN1_FASTBOOT	BIT(13)
+#define MT6351_RTC_WRTGR	0x403c	/* RTC base + RTC_WRTGR (0x3c) */
+
+static struct udevice *gemini_pmic(void)
+{
+	struct udevice *dev;
+
+	/* The pwrap wrapper is the board's only UCLASS_PMIC device. */
+	return uclass_first_device_err(UCLASS_PMIC, &dev) ? NULL : dev;
+}
+
+/* Commit an RTC register write: pulse WRTGR, then wait up to ~1 s (like the
+ * kernel driver) for BBPU CBUSY to clear. */
+static int gemini_rtc_commit(struct udevice *pmic)
+{
+	int i, val;
+
+	val = pmic_reg_write(pmic, MT6351_RTC_WRTGR, 1);
+	if (val)
+		return val;
+
+	for (i = 0; i < 1000; i++) {
+		val = pmic_reg_read(pmic, MT6351_RTC_BBPU);
+		if (val < 0)
+			return val;
+		if (!(val & RTC_BBPU_CBUSY))
+			return 0;
+		udelay(1000);
+	}
+	return -ETIMEDOUT;
+}
+
+/*
+ * Enter fastboot instead of autobooting when "reboot bootloader" requested it,
+ * so remote reflash/test cycles need no physical interaction. Read the RTC
+ * FAST_BOOT bit, clear it (read-modify-write preserving the other PDN1 fields,
+ * then WRTGR) so the request is one-shot, and only enter fastboot once a
+ * read-back confirms the bit is gone - otherwise a stuck bit would trap every
+ * boot in fastboot.
+ */
+static void gemini_check_fastboot_request(void)
+{
+	struct udevice *pmic = gemini_pmic();
+	int pdn1;
+
+	if (!pmic)
+		return;
+
+	pdn1 = pmic_reg_read(pmic, MT6351_RTC_PDN1);
+	if (pdn1 < 0 || !(pdn1 & RTC_PDN1_FASTBOOT))
+		return;
+
+	if (pmic_reg_write(pmic, MT6351_RTC_PDN1, pdn1 & ~RTC_PDN1_FASTBOOT) ||
+	    gemini_rtc_commit(pmic))
+		printf("fastboot: failed to clear RTC FAST_BOOT bit\n");
+
+	pdn1 = pmic_reg_read(pmic, MT6351_RTC_PDN1);
+	if (pdn1 < 0 || (pdn1 & RTC_PDN1_FASTBOOT)) {
+		printf("fastboot: RTC FAST_BOOT still set, booting normally\n");
+		return;
+	}
+
+	printf("fastboot requested -> entering fastboot\n");
+	/* Keep CONFIG_BOOTCOMMAND after it so leaving fastboot (Ctrl-C /
+	 * "fastboot continue") falls through to a normal boot, not a prompt. */
+	env_set("bootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
+}
+
+/*
  * Give fastboot a stable identity. "board" backs `fastboot getvar product`
  * and serial# backs both `getvar serialno` and the USB iSerial string; without
  * them the host shows a blank serial and product reads "Board not set". Derive
@@ -254,6 +341,8 @@ int board_late_init(void)
 	}
 
 	gemini_disable_emmc_cache();
+
+	gemini_check_fastboot_request();
 
 	gemini_wait_keys_released();
 

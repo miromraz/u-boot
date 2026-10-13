@@ -7,6 +7,7 @@
 #include <console.h>
 #include <cpu_func.h>
 #include <env.h>
+#include <g_dnl.h>
 #include <init.h>
 #include <memalign.h>
 #include <mmc.h>
@@ -121,6 +122,26 @@ int board_init(void)
  */
 void board_quiesce_devices(void)
 {
+	/*
+	 * The OS is often booted from inside a live fastboot gadget session
+	 * (e.g. "fastboot oem run:booti ...", "bootflow scan", or the Boot
+	 * Linux menu entry), so do_fastboot_usb() never returns and its
+	 * g_dnl_unregister() teardown never runs. That leaves the MTU3 D+
+	 * soft-connect asserted across the kernel jump: the host sees no
+	 * disconnect, the kernel's gadget binds behind descriptors the host
+	 * already enumerated, and the OS NCM/ADB gadget never appears until the
+	 * cable is physically replugged. Release the download gadget here (the
+	 * weak hook bootm runs right before every OS jump) so SOFT_CONN drops
+	 * and the host re-enumerates the OS gadget cleanly. Safe no-op when no
+	 * gadget is registered (usb_composite_unregister() ignores it), so this
+	 * also covers the Android path. The mdelay lets the host register the
+	 * electrical disconnect before the OS re-asserts the pull-up.
+	 */
+	if (IS_ENABLED(CONFIG_USB_GADGET_DOWNLOAD)) {
+		g_dnl_unregister();
+		mdelay(50);
+	}
+
 	if (env_get("gemini_android"))
 		return;
 

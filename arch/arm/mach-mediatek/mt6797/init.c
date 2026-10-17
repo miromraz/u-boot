@@ -12,6 +12,7 @@
 #include <dm.h>
 #include <env.h>
 #include <errno.h>
+#include <fdt_simplefb.h>
 #include <fdt_support.h>
 #include <fdtdec.h>
 #include <i2c.h>
@@ -336,6 +337,18 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 	 */
 	if (env_get("gemini_android"))
 		return 0;
+
+	/*
+	 * Enable the kernel's simple-framebuffer node and reserve its memory
+	 * so simpledrm can hold the MM display clocks and power domain across
+	 * the clk_disable_unused() gap until mediatek-drm binds. Fills reg/
+	 * format from the live video device; gated on video_is_active().
+	 * Non-fatal: a kernel DTB without the node (or inactive video) just
+	 * skips it, so older kernels still boot.
+	 */
+	ret = fdt_simplefb_enable_and_mem_rsv(blob);
+	if (ret)
+		printf("gemini: simple-framebuffer fixup skipped (%d)\n", ret);
 
 	chosen = fdt_path_offset(blob, "/chosen");
 	if (chosen < 0)

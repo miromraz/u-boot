@@ -28,6 +28,13 @@
 	aliases {
 		serial0 = &uart0;
 		mmc0 = &mmc0;
+		/*
+		 * Fix the i2c bus numbers: `fastboot oem run` returns no console
+		 * output, so the A72 proof must address i2c6 blindly as a known
+		 * `i2c dev 6` (the DA9214 / buck B bus).
+		 */
+		i2c5 = &i2c5;
+		i2c6 = &i2c6;
 	};
 
 	chosen {

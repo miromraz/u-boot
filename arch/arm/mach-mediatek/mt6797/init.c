@@ -14,11 +14,16 @@
 #include <errno.h>
 #include <fdt_support.h>
 #include <fdtdec.h>
+#include <i2c.h>
 #include <init.h>
 #include <wdt.h>
 #include <vsprintf.h>
 #include <asm/global_data.h>
+#include <asm/io.h>
 #include <asm/system.h>
+#include <linux/arm-smccc.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/libfdt.h>
 #include <linux/sizes.h>
 
@@ -165,6 +170,130 @@ int print_cpuinfo(void)
 }
 
 /*
+ * Cortex-A72 ("big"/iDVFS "B") cluster power-on, the vendor 3.18
+ * cpu_power_on_buck() sequence (docs/a72.md). The MT6797 ships a thin
+ * closed PSCI that does NOT power the B cluster in EL3, so a plain
+ * PSCI CPU_ON of cpu@200/@201 hangs the SoC. The vendor works around this
+ * from the kernel; U-Boot owns the boot before Linux and can do it once here
+ * so Linux then brings both A72 cores up with plain PSCI during boot-time SMP
+ * (they are present at capability finalisation, avoiding the Spectre-v2
+ * hot-online reject). Proven on hardware by the manual `oem run` sequence
+ * (all 10 CPUs online, policy8 DVFS across the full table).
+ *
+ * The register pokes are raw readl()/writel(): these are bare SoC control
+ * registers with no syscon/regmap node in the U-Boot DT, and this runs once.
+ * Only buck B (over i2c6) can fail in a way that would leave the cluster
+ * unpowered, so that is the step whose failure aborts the whole power-on.
+ */
+#define MT6797_SPM_CL2_PWR_REQ		0x10006218	/* bit0: CL2 req  */
+#define MT6797_SPM_CL2_EXT_BUCK_ISO	0x10006290	/* bits1:0: B iso */
+#define MT6797_IDVFS_PLL_DUMMY		0x102224a0	/* dummy read     */
+#define MT6797_TOPRGU_SWSYSRST		0x10007018	/* key 0x88<<24   */
+#define MT6797_TOPRGU_SWSYSRST_EN	0x100070fc
+#define MT6797_TOPRGU_KEY		0x88000000
+#define MT6797_PWRAP_SPI_RST		BIT(11)		/* PWRAP-SPI line */
+#define MT6797_MCUCFG_MP2_DCM		0x10222274	/* MP2 sync DCM   */
+#define MT6797_MP2_DCM_CFG		0xd		/* ON | DIV_SEL4  */
+#define MT6797_MP2_DCM_TOG		BIT(1)		/* toggle bit     */
+
+#define DA9214_I2C_BUS			6
+#define DA9214_I2C_ADDR			0x68
+#define DA9214_VBUCKB_A			0xd9	/* 300 mV + 10 mV/step */
+#define DA9214_VBUCKB_1V00		0x46	/* vsel for 1.00 V     */
+#define DA9214_BUCKB_CONT		0x5e
+#define DA9214_BUCKB_EN			0x01	/* EN=1, sel=A, GPI off */
+
+#define IDVFS_SMC_B_SRAM_LDO		0xc20003bf	/* mV * 100 */
+#define B_SRAM_LDO_1V10			0x1adb0		/* 1100 mV  */
+
+static int gemini_cl2_power_on(void)
+{
+	struct arm_smccc_res res;
+	struct udevice *dev;
+	int ret;
+	u32 v;
+
+	/* DA9214 buck B is the only step that can fail; resolve it first so a
+	 * bus problem aborts before any SPM/TOPRGU/MCUCFG state is touched.
+	 */
+	ret = i2c_get_chip_for_busnum(DA9214_I2C_BUS, DA9214_I2C_ADDR, 1, &dev);
+	if (ret)
+		return ret;
+
+	/* 1) SPM CL2 power request. */
+	writel(readl(MT6797_SPM_CL2_PWR_REQ) | BIT(0), MT6797_SPM_CL2_PWR_REQ);
+
+	/* 2) dummy read of the iDVFS PLL word. */
+	readl(MT6797_IDVFS_PLL_DUMMY);
+
+	/* 3) latch the TOPRGU PWRAP-SPI reset (SWSYSRST needs the 0x88 key). */
+	writel(readl(MT6797_TOPRGU_SWSYSRST_EN) | MT6797_PWRAP_SPI_RST,
+	       MT6797_TOPRGU_SWSYSRST_EN);
+	writel((readl(MT6797_TOPRGU_SWSYSRST) | MT6797_PWRAP_SPI_RST) |
+	       MT6797_TOPRGU_KEY, MT6797_TOPRGU_SWSYSRST);
+
+	/* 4) set VBUCKB to 1.00 V, enable buck B, settle 1 ms. */
+	ret = dm_i2c_reg_write(dev, DA9214_VBUCKB_A, DA9214_VBUCKB_1V00);
+	if (ret)
+		return ret;
+	ret = dm_i2c_reg_write(dev, DA9214_BUCKB_CONT, DA9214_BUCKB_EN);
+	if (ret)
+		return ret;
+	udelay(1000);
+
+	/* 5) clear the B external-buck isolation. */
+	writel(readl(MT6797_SPM_CL2_EXT_BUCK_ISO) & ~0x3u,
+	       MT6797_SPM_CL2_EXT_BUCK_ISO);
+
+	/* 6) unlatch the PWRAP reset. */
+	writel((readl(MT6797_TOPRGU_SWSYSRST) & ~MT6797_PWRAP_SPI_RST) |
+	       MT6797_TOPRGU_KEY, MT6797_TOPRGU_SWSYSRST);
+	writel(readl(MT6797_TOPRGU_SWSYSRST_EN) & ~MT6797_PWRAP_SPI_RST,
+	       MT6797_TOPRGU_SWSYSRST_EN);
+
+	/* 7) set the B SRAM LDO to 1.10 V via the iDVFS SIP, 240 us each side.
+	 * The SIP's return convention is undocumented and the vendor path does
+	 * not check it, so the call is fire-and-forget; the i2c step above is
+	 * the guard against an unpowered cluster.
+	 */
+	udelay(240);
+	arm_smccc_smc(IDVFS_SMC_B_SRAM_LDO, B_SRAM_LDO_1V10,
+		      0, 0, 0, 0, 0, 0, &res);
+	udelay(240);
+
+	/* 8) pre-configure the MP2 sync DCM (set the field, then toggle TOG). */
+	v = (readl(MT6797_MCUCFG_MP2_DCM) & ~0x7fu) | MT6797_MP2_DCM_CFG;
+	writel(v | MT6797_MP2_DCM_TOG, MT6797_MCUCFG_MP2_DCM);
+	writel(v, MT6797_MCUCFG_MP2_DCM);
+
+	return 0;
+}
+
+/*
+ * Append " maxcpus=8" to /chosen/bootargs, keeping the A72 cores offline. Used
+ * both when the user set no maxcpus token and when a requested A72 power-on
+ * failed: a later maxcpus= overrides an earlier one (the kernel parses left to
+ * right), so appending 8 caps a user "maxcpus=10" back to the A53s.
+ */
+static int gemini_append_maxcpus8(void *blob, int chosen, const char *old)
+{
+	char args[CONFIG_SYS_CBSIZE];
+	int ret;
+
+	ret = snprintf(args, sizeof(args), "%s%smaxcpus=8",
+		       old ?: "", old ? " " : "");
+	/* Never truncate the user's bootargs to fit ours. */
+	if (ret >= sizeof(args))
+		ret = -FDT_ERR_NOSPACE;
+	else
+		ret = fdt_setprop_string(blob, chosen, "bootargs", args);
+	if (ret < 0)
+		printf("gemini: failed to set maxcpus bootarg (%d)\n", ret);
+
+	return ret;
+}
+
+/*
  * The kernel loads its own DTB from the rootfs, so its reserved-memory does
  * not include the regions LK carved out of DRAM at runtime (TEE/ATF/modem, the
  * retained framebuffer and firmware logs, and the "mblock-*" blocks). Copy
@@ -173,16 +302,21 @@ int print_cpuinfo(void)
  * not reuse memory LK (or its secure world) still owns. U-Boot fixes up
  * /memory itself.
  *
- * Also keep the A72 cores (cpu@200/@201, i.e. CPU8/9) offline unless the user
- * asked for a specific maxcpus: bringing them up without the DA9214 buck
- * sequencing hangs the kernel. fdt_chosen() has already written the extlinux
- * "append" line into /chosen/bootargs by the time image_setup_libfdt() calls
- * us, so append " maxcpus=8" only when the user set no maxcpus token.
+ * Also handle the A72 cores (cpu@200/@201, i.e. CPU8/9). They are off at
+ * kernel entry; a plain PSCI CPU_ON of an unpowered A72 hangs the SoC, so:
+ *   - maxcpus absent or <= 8: keep them offline (append maxcpus=8 if absent);
+ *   - maxcpus > 8: the user wants the A72s, so run the power-on sequence here,
+ *     and only if it succeeds leave the bootargs so Linux brings them up.
+ *     On any failure cap maxcpus back to 8 so Linux never CPU_ONs them.
+ * fdt_chosen() has already written the extlinux "append" line into
+ * /chosen/bootargs by the time image_setup_libfdt() calls us.
  */
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const void *lk = gd->fdt_blob;
+	const char *old;
 	int ret, chosen;
+	long maxcpus;
 
 	ret = gemini_copy_reservations(blob, lk);
 	if (ret < 0)
@@ -196,25 +330,28 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		return 0;
 
 	chosen = fdt_path_offset(blob, "/chosen");
-	if (chosen >= 0) {
-		const char *old = fdt_getprop(blob, chosen, "bootargs", NULL);
+	if (chosen < 0)
+		return 0;
 
-		if (!gemini_bootargs_has_maxcpus(old)) {
-			char args[CONFIG_SYS_CBSIZE];
+	old = fdt_getprop(blob, chosen, "bootargs", NULL);
+	maxcpus = gemini_bootargs_maxcpus_value(old);
 
-			ret = snprintf(args, sizeof(args), "%s%smaxcpus=8",
-				       old ?: "", old ? " " : "");
-			/* Never truncate the user's bootargs to fit ours. */
-			if (ret >= sizeof(args))
-				ret = -FDT_ERR_NOSPACE;
-			else
-				ret = fdt_setprop_string(blob, chosen,
-							 "bootargs", args);
-			if (ret < 0)
-				printf("gemini: failed to set maxcpus bootarg (%d)\n",
-				       ret);
+	if (maxcpus > 8) {
+		ret = gemini_cl2_power_on();
+		if (ret) {
+			printf("gemini: Cortex-A72 power-on failed (%d), capping maxcpus=8\n",
+			       ret);
+			gemini_append_maxcpus8(blob, chosen, old);
+		} else {
+			printf("gemini: Cortex-A72 cluster powered on (maxcpus=%ld)\n",
+			       maxcpus);
 		}
+		return 0;
 	}
+
+	/* No A72 requested: append our default only if the user set none. */
+	if (maxcpus < 0)
+		gemini_append_maxcpus8(blob, chosen, old);
 
 	return 0;
 }

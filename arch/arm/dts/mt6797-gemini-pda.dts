@@ -204,6 +204,18 @@
 		clock-frequency = <62400000>;
 	};
 
+	/*
+	 * Clock for i2c6 (the CPU-DVFS "APPM" bus). Modelled as a fixed-clock
+	 * like i2c5; U-Boot's mtk_i2c divides it down with its own fixed
+	 * clock-div, so the real SCL only has to be slow enough for the DA9214
+	 * to ACK a register write, which this is.
+	 */
+	i2c6_clk: clock-i2c6 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <62400000>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -369,6 +381,35 @@
 					MATRIX_KEY(5, 6, KEY_L)
 					MATRIX_KEY(6, 6, KEY_0)
 				>;
+			};
+		};
+
+		/*
+		 * I2C6 -> DA9214 dual buck (0x68). Buck B ("VPROC2") powers the
+		 * Cortex-A72 cluster and is off at kernel entry. This node is
+		 * only here so the A72 cluster power-on proof (and, later, the
+		 * board code) can enable buck B over the bus with the `i2c`
+		 * command before booting Linux. Standard-mode / open-drain
+		 * (clock-frequency 100 kHz, no HS, no push-pull): the mainline
+		 * i2c6 NACKs the DA9214 in 3.4 MHz HS push-pull. Reads over this
+		 * bus are unreliable (the APPM controller merges the WRRD
+		 * transfer length, which the generic driver does not model), but
+		 * register writes do not use that path.
+		 */
+		i2c6: i2c@1100e000 {
+			compatible = "mediatek,mt6797-i2c", "mediatek,mt6577-i2c";
+			reg = <0 0x1100e000 0 0x1000>,
+			      <0 0x11000500 0 0x80>;
+			clocks = <&i2c6_clk>, <&i2c6_clk>;
+			clock-names = "main", "dma";
+			clock-frequency = <100000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			da9214: regulator@68 {
+				compatible = "dlg,da9214";
+				reg = <0x68>;
 			};
 		};
 

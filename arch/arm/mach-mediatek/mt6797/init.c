@@ -209,14 +209,22 @@ int print_cpuinfo(void)
 static int gemini_cl2_power_on(void)
 {
 	struct arm_smccc_res res;
-	struct udevice *dev;
+	struct udevice *bus, *dev;
 	int ret;
 	u32 v;
 
 	/* DA9214 buck B is the only step that can fail; resolve it first so a
 	 * bus problem aborts before any SPM/TOPRGU/MCUCFG state is touched.
+	 * Mirror the proven `i2c dev 6` + `i2c mw` command path exactly: fetch
+	 * the bus by its (aliased) sequence and the chip with no presence
+	 * probe. i2c_get_chip_for_busnum() would add an i2c_probe_chip() detect
+	 * read, which i2c6 cannot do - the APPM controller merges the WRRD
+	 * transfer length, so only writes land on this bus.
 	 */
-	ret = i2c_get_chip_for_busnum(DA9214_I2C_BUS, DA9214_I2C_ADDR, 1, &dev);
+	ret = uclass_get_device_by_seq(UCLASS_I2C, DA9214_I2C_BUS, &bus);
+	if (ret)
+		return ret;
+	ret = i2c_get_chip(bus, DA9214_I2C_ADDR, 1, &dev);
 	if (ret)
 		return ret;
 

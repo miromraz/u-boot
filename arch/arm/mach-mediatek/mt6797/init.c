@@ -339,6 +339,25 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		return 0;
 
 	/*
+	 * The simple-framebuffer node sits under /chosen, which carries no
+	 * #address-cells/#size-cells of its own. fdt_setup_simplefb_node()
+	 * encodes the "reg" from the parent's cell counts: libfdt defaults
+	 * #address-cells to 2 but #size-cells to 1, giving a 3-cell reg. The
+	 * kernel decodes that reg with of_n_{addr,size}_cells(), which walk up
+	 * to the mt6797 root (#address-cells = 2, #size-cells = 2) and need a
+	 * 4-cell reg, so of_address_to_resource() returns -EINVAL and simpledrm
+	 * fails probe. Make /chosen's cells explicit (2/2) before filling the
+	 * node so both sides agree, independent of what the kernel DTB declares.
+	 */
+	chosen = fdt_path_offset(blob, "/chosen");
+	if (chosen >= 0) {
+		if (!fdt_getprop(blob, chosen, "#address-cells", NULL))
+			fdt_setprop_u32(blob, chosen, "#address-cells", 2);
+		if (!fdt_getprop(blob, chosen, "#size-cells", NULL))
+			fdt_setprop_u32(blob, chosen, "#size-cells", 2);
+	}
+
+	/*
 	 * Enable the kernel's simple-framebuffer node and reserve its memory
 	 * so simpledrm can hold the MM display clocks and power domain across
 	 * the clk_disable_unused() gap until mediatek-drm binds. Fills reg/

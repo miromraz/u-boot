@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+export CROSS_COMPILE =
+BUILD = build-gemini
+PKGDIR = debian/u-boot-gemini-simplefb/usr/lib/u-boot-gemini
+%:
+	dh $@
+override_dh_auto_configure:
+	$(MAKE) O=$(BUILD) gemini-pda_defconfig
+	echo 'CONFIG_IDENT_STRING=" gemini-simplefb 0fbcce37674"' >> $(BUILD)/.config
+	$(MAKE) O=$(BUILD) olddefconfig
+override_dh_auto_build:
+	$(MAKE) O=$(BUILD)
+	MKBOOTIMG=$(CURDIR)/debian/mkbootimg-shim \
+		sh ./board/planet/gemini-pda/mkbootimg.sh $(BUILD)
+override_dh_auto_install:
+	install -D -m0644 $(BUILD)/u-boot.bin $(PKGDIR)/u-boot.bin
+	install -D -m0644 $(BUILD)/u-boot-gemini-boot.img $(PKGDIR)/u-boot-gemini-boot.img
+	install -D -m0644 $(BUILD)/arch/arm/dts/mt6797-gemini-pda.dtb $(PKGDIR)/mt6797-gemini-pda.dtb
+override_dh_auto_test:
+override_dh_auto_clean:
+	rm -rf $(BUILD)

@@ -1,0 +1,8 @@
+u-boot-gemini-simplefb (2026.10+simplefb.0fbcce37674) unstable; urgency=medium
+
+  * simple-framebuffer handoff variant (tip 0fbcce37674): enable the kernel
+    simple-framebuffer at boot and declare the /chosen cells before the simplefb
+    fixup. Installs u-boot.bin, the LK boot image and the raw DTB.
+  * Native aarch64 build, no cross compiler.
+
+ -- realni <ant@ict4.cz>  Sat, 18 Oct 2026 00:00:00 +0000

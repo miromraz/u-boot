@@ -1,3 +1,11 @@
+u-boot-gemini-simplefb (2026.10+charger.8eb22f0e703f) unstable; urgency=medium
+
+  * Charger variant (tip 8eb22f0e703f, on top of the simplefb handoff): keep
+    the BQ25896 charging while U-Boot sits in fastboot (disable the chip's I2C
+    watchdog, enable charging, hold a 500 mA input baseline). Same artifacts.
+
+ -- realni <ant@ict4.cz>  Fri, 24 Oct 2026 00:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10+simplefb.0fbcce37674) unstable; urgency=medium
 
   * simple-framebuffer handoff variant (tip 0fbcce37674): enable the kernel

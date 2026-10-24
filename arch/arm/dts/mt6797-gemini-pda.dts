@@ -33,6 +33,7 @@
 		 * output, so the A72 proof must address i2c6 blindly as a known
 		 * `i2c dev 6` (the DA9214 / buck B bus).
 		 */
+		i2c0 = &i2c0;
 		i2c5 = &i2c5;
 		i2c6 = &i2c6;
 	};
@@ -223,6 +224,17 @@
 		clock-frequency = <62400000>;
 	};
 
+	/*
+	 * Clock for i2c0 (the BQ25896 charger bus). Modelled as a fixed-clock
+	 * like i2c5/i2c6; LK already enables this bus (it charges during the
+	 * vendor boot), so U-Boot only drives the charger config bus at ~100 kHz.
+	 */
+	i2c0_clk: clock-i2c0 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <62400000>;
+	};
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -305,6 +317,30 @@
 						mediatek,key-mask = <0x4>;
 					};
 				};
+			};
+		};
+
+		/*
+		 * I2C0 -> TI BQ25896 single-cell charger (0x6b). LK leaves the
+		 * bus muxed and clocked (it charges during the vendor boot), so
+		 * U-Boot only needs the bus to keep the charger alive while it
+		 * sits in fastboot. The APDMA channel region (0x11000100) mirrors
+		 * the kernel mt6797.dtsi i2c0 "dma" reg.
+		 */
+		i2c0: i2c@11007000 {
+			compatible = "mediatek,mt6797-i2c", "mediatek,mt6577-i2c";
+			reg = <0 0x11007000 0 0x1000>,
+			      <0 0x11000100 0 0x80>;
+			clocks = <&i2c0_clk>, <&i2c0_clk>;
+			clock-names = "main", "dma";
+			clock-frequency = <100000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			charger: charger@6b {
+				compatible = "ti,bq25896";
+				reg = <0x6b>;
 			};
 		};
 

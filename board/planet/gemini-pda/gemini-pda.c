@@ -9,6 +9,7 @@
 #include <env.h>
 #include <errno.h>
 #include <g_dnl.h>
+#include <i2c.h>
 #include <init.h>
 #include <memalign.h>
 #include <mmc.h>
@@ -318,6 +319,71 @@ static void gemini_check_fastboot_request(void)
 }
 
 /*
+ * TI BQ25896 single-cell charger on i2c0 (datasheet SLUSC76). LK enables
+ * charging before handing over, and the chip charges on its own, but its I2C
+ * watchdog resets the charge registers ~40 s after the last host access
+ * (REG07 WATCHDOG, default 40 s). U-Boot has no timer loop to pet it, so while
+ * the board sits in fastboot waiting for a rescue the watchdog fires, input
+ * detection re-runs and the input limit can fall to the 100 mA floor, and the
+ * battery drains. Mirror the vendor firmware, which disables this watchdog in
+ * its charger init: pet it once, turn it off, make sure charging is enabled
+ * with HIZ cleared, and hold the input current limit at the 500 mA USB-host
+ * baseline (never lower a higher limit the chip set for an adapter). The chip's
+ * power-on charge voltage/current defaults already match the vendor settings,
+ * so nothing else is reprogrammed. Best-effort: every I2C error is logged and
+ * ignored, so a charger fault never blocks boot.
+ */
+#define BQ25896_I2C_BUS			0	/* aliases: i2c0 = &i2c0 */
+#define BQ25896_I2C_ADDR		0x6b
+#define BQ25896_REG00			0x00	/* EN_HIZ[7], IINLIM[5:0] */
+#define BQ25896_REG00_EN_HIZ		BIT(7)
+#define BQ25896_REG00_IINLIM		GENMASK(5, 0)
+#define BQ25896_IINLIM_500MA		0x08	/* (500 - 100) / 50 mA */
+#define BQ25896_REG03			0x03	/* WD_RST[6], OTG_CONFIG[5], CHG_CONFIG[4] */
+#define BQ25896_REG03_WD_RST		BIT(6)
+#define BQ25896_REG03_OTG_CONFIG	BIT(5)
+#define BQ25896_REG03_CHG_CONFIG	BIT(4)
+#define BQ25896_REG07			0x07	/* WATCHDOG[5:4] */
+#define BQ25896_REG07_WATCHDOG		GENMASK(5, 4)
+
+static void gemini_charger_init(void)
+{
+	struct udevice *dev;
+	int ret, reg00;
+
+	ret = i2c_get_chip_for_busnum(BQ25896_I2C_BUS, BQ25896_I2C_ADDR, 1,
+				      &dev);
+	if (ret) {
+		printf("charger: BQ25896 not found on i2c0 (%d), skipping\n",
+		       ret);
+		return;
+	}
+
+	reg00 = dm_i2c_reg_read(dev, BQ25896_REG00);
+	if (reg00 < 0) {
+		printf("charger: BQ25896 read failed (%d), skipping\n", reg00);
+		return;
+	}
+
+	/* Clear HIZ and raise the input limit to >= 500 mA, never below it. */
+	if ((reg00 & BQ25896_REG00_IINLIM) < BQ25896_IINLIM_500MA)
+		dm_i2c_reg_clrset(dev, BQ25896_REG00,
+				  BQ25896_REG00_EN_HIZ | BQ25896_REG00_IINLIM,
+				  BQ25896_IINLIM_500MA);
+	else
+		dm_i2c_reg_clrset(dev, BQ25896_REG00, BQ25896_REG00_EN_HIZ, 0);
+
+	/* Pet the watchdog, enable charging, keep boost (OTG) off. */
+	dm_i2c_reg_clrset(dev, BQ25896_REG03, BQ25896_REG03_OTG_CONFIG,
+			  BQ25896_REG03_WD_RST | BQ25896_REG03_CHG_CONFIG);
+
+	/* Disable the I2C watchdog so the settings persist with no kick loop. */
+	dm_i2c_reg_clrset(dev, BQ25896_REG07, BQ25896_REG07_WATCHDOG, 0);
+
+	printf("charger: BQ25896 charging enabled, I2C watchdog off\n");
+}
+
+/*
  * Give fastboot a stable identity. "board" backs `fastboot getvar product`
  * and serial# backs both `getvar serialno` and the USB iSerial string; without
  * them the host shows a blank serial and product reads "Board not set". Derive
@@ -341,6 +407,8 @@ int board_late_init(void)
 	}
 
 	gemini_disable_emmc_cache();
+
+	gemini_charger_init();
 
 	gemini_check_fastboot_request();
 

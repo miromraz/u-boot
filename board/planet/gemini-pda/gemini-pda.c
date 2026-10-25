@@ -358,22 +358,28 @@ ulong bootcount_load(void)
 #define MT6797_TOPRGU_STATUS	(0x10007000 + 0x0c)
 #define WDT_STATUS_WDT_RST	(BIT(31) | BIT(30))	/* HW | SW watchdog */
 
-static bool gemini_last_reset_was_wdt(void)
-{
-	return !!(readl((void __iomem *)MT6797_TOPRGU_STATUS) &
-		  WDT_STATUS_WDT_RST);
-}
-
 static void gemini_bootcount_init(void)
 {
+	u32 status = readl((void __iomem *)MT6797_TOPRGU_STATUS);
+	ulong count;
+
 	if (!env_get("bootlimit"))
 		env_set("bootlimit", "3");
 	if (!env_get("altbootcmd"))
 		env_set("altbootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
 
-	/* Only write when there is a streak to clear, to spare the RTC. */
-	if (!gemini_last_reset_was_wdt() && bootcount_load())
+	count = bootcount_load();
+	/* Reset the streak on a non-watchdog reset; skip the write if clear. */
+	if (!(status & WDT_STATUS_WDT_RST) && count) {
 		bootcount_store(0);
+		count = 0;
+	}
+
+	/*
+	 * No UART on this unit: echo to the panel console so the HW test can
+	 * watch the counter climb and see the raw reset cause.
+	 */
+	printf("bootcount: %lu, TOPRGU status 0x%08x\n", count, status);
 }
 #endif /* CONFIG_BOOTCOUNT_LIMIT */
 

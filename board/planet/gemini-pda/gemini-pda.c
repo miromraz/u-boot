@@ -343,44 +343,31 @@ ulong bootcount_load(void)
 }
 
 /*
- * Reset the streak on any reset that is NOT a watchdog timeout: a cold
- * power-on, a clean reboot and a fastboot reboot all mean the previous boot did
- * not hang, so the count starts over. Only consecutive watchdog resets - the
- * signature of a kernel that hangs before it can pet the RGU - accumulate
- * towards "bootlimit". The TOPRGU status latch holds the last reset cause
- * across the reset.
+ * U-Boot only ever *increments* the count (autoboot's bootcount_inc() on every
+ * start); it is cleared by Linux once a boot reaches userspace, via the RTC
+ * spare register exposed as an nvmem cell (see docs/uboot-boot-fallback.md).
  *
- * TODO(hw-verify): confirm the preloader/LK leave WDT_STATUS latched until this
- * runs, and the HW/SW-WDT bit positions. If the status is always clear here the
- * count is only ever reset (a safe no-op) and must instead be cleared from
- * Linux once userspace is healthy - see docs/uboot-boot-fallback.md.
+ * An earlier design reset the streak here on a non-watchdog reset by reading
+ * the TOPRGU status latch, but HW showed the MT6797 preloader/LK clear that
+ * latch before U-Boot runs (DEBUG.md 25L/25m), so it always read "not a
+ * watchdog" and reset every cycle - the fallback never fired. The Linux-side
+ * clear does not depend on any reset-cause latch.
+ *
+ * Because U-Boot now always increments, the Linux clear MUST be deployed before
+ * this firmware is relied on, or good boots would also reach bootlimit.
  */
-#define MT6797_TOPRGU_STATUS	(0x10007000 + 0x0c)
-#define WDT_STATUS_WDT_RST	(BIT(31) | BIT(30))	/* HW | SW watchdog */
-
 static void gemini_bootcount_init(void)
 {
-	u32 status = readl((void __iomem *)MT6797_TOPRGU_STATUS);
-	ulong count;
-
 	/*
 	 * "bootlimit" and "altbootcmd" are baked into the compiled default
 	 * environment (CONFIG_BOOTCOUNT_BOOTLIMIT / CONFIG_BOOTCOUNT_ALTBOOTCMD),
 	 * not set here: env is CONFIG_ENV_IS_NOWHERE, so the default env is
 	 * authoritative and present from the first boot instruction.
+	 *
+	 * No UART on this unit: echo the loaded count to the panel console so the
+	 * HW test can watch it climb across failed boots.
 	 */
-	count = bootcount_load();
-	/* Reset the streak on a non-watchdog reset; skip the write if clear. */
-	if (!(status & WDT_STATUS_WDT_RST) && count) {
-		bootcount_store(0);
-		count = 0;
-	}
-
-	/*
-	 * No UART on this unit: echo to the panel console so the HW test can
-	 * watch the counter climb and see the raw reset cause.
-	 */
-	printf("bootcount: %lu, TOPRGU status 0x%08x\n", count, status);
+	printf("bootcount: %lu\n", bootcount_load());
 }
 #endif /* CONFIG_BOOTCOUNT_LIMIT */
 

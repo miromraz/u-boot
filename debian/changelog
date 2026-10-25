@@ -1,3 +1,11 @@
+u-boot-gemini-simplefb (2026.10+bootfallback.d10bc8dbe70) unstable; urgency=medium
+
+  * Fix the fallback being inert: bake bootlimit=3 and altbootcmd into the
+    compiled default env (CONFIG_BOOTCOUNT_BOOTLIMIT / _ALTBOOTCMD) instead of
+    board_late_init env_set, which env_default.h shadowed. Same artifacts.
+
+ -- realni <ant@ict4.cz>  Sat, 25 Oct 2026 12:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10+bootfallback.cc819dcbb6f) unstable; urgency=medium
 
   * Boot-failure fallback variant (tip cc819dcbb6f, on top of the charger

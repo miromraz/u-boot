@@ -371,7 +371,8 @@ static void gemini_bootcount_init(void)
 	if (!env_get("altbootcmd"))
 		env_set("altbootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
 
-	if (!gemini_last_reset_was_wdt())
+	/* Only write when there is a streak to clear, to spare the RTC. */
+	if (!gemini_last_reset_was_wdt() && bootcount_load())
 		bootcount_store(0);
 }
 #endif /* CONFIG_BOOTCOUNT_LIMIT */

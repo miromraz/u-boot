@@ -363,11 +363,12 @@ static void gemini_bootcount_init(void)
 	u32 status = readl((void __iomem *)MT6797_TOPRGU_STATUS);
 	ulong count;
 
-	if (!env_get("bootlimit"))
-		env_set("bootlimit", "3");
-	if (!env_get("altbootcmd"))
-		env_set("altbootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
-
+	/*
+	 * "bootlimit" and "altbootcmd" are baked into the compiled default
+	 * environment (CONFIG_BOOTCOUNT_BOOTLIMIT / CONFIG_BOOTCOUNT_ALTBOOTCMD),
+	 * not set here: env is CONFIG_ENV_IS_NOWHERE, so the default env is
+	 * authoritative and present from the first boot instruction.
+	 */
 	count = bootcount_load();
 	/* Reset the streak on a non-watchdog reset; skip the write if clear. */
 	if (!(status & WDT_STATUS_WDT_RST) && count) {

@@ -1,3 +1,13 @@
+u-boot-gemini-simplefb (2026.10+bootfallback.cc819dcbb6f) unstable; urgency=medium
+
+  * Boot-failure fallback variant (tip cc819dcbb6f, on top of the charger
+    build): CONFIG_BOOTCOUNT_LIMIT counts consecutive RGU watchdog resets in
+    the always-on MT6351 RTC and runs "fastboot usb 0" once the count exceeds
+    bootlimit, so a hung cold boot recovers without the side button. Same
+    artifacts.
+
+ -- realni <ant@ict4.cz>  Sat, 25 Oct 2026 00:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10+charger.8eb22f0e703f) unstable; urgency=medium
 
   * Charger variant (tip 8eb22f0e703f, on top of the simplefb handoff): keep

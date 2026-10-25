@@ -1,3 +1,11 @@
+u-boot-gemini-simplefb (2026.10+bootfallback.f3e24215628) unstable; urgency=medium
+
+  * Drop the TOPRGU WDT-status gate (the preloader clears the latch, so it
+    reset the streak every cycle and the device WDT-looped). U-Boot now only
+    increments; Linux clears the count on a good boot. Same artifacts.
+
+ -- realni <ant@ict4.cz>  Sat, 25 Oct 2026 15:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10+bootfallback.d10bc8dbe70) unstable; urgency=medium
 
   * Fix the fallback being inert: bake bootlimit=3 and altbootcmd into the

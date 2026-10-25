@@ -3,6 +3,7 @@
  * Board support for the Planet Computers Gemini PDA (MediaTek MT6797).
  */
 
+#include <bootcount.h>
 #include <button.h>
 #include <console.h>
 #include <cpu_func.h>
@@ -282,6 +283,99 @@ static int gemini_rtc_commit(struct udevice *pmic)
 	return -ETIMEDOUT;
 }
 
+#if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
+/*
+ * Boot-failure fallback (CONFIG_BOOTCOUNT_LIMIT).
+ *
+ * A cold-booted kernel that hangs before it takes over the RGU watchdog (for
+ * example an extlinux label whose DTB is missing, so USB/NCM never comes up)
+ * lets the LK-armed watchdog fire and reset the SoC, which otherwise drops the
+ * user into the preloader download loop until they re-enter fastboot by hand.
+ * Instead, count consecutive watchdog resets and, once the count exceeds
+ * "bootlimit", run "altbootcmd" (fastboot usb 0) in place of the normal boot,
+ * so a bad boot recovers to fastboot with no physical interaction.
+ *
+ * The count must survive the warm RGU reset. DRAM does not survive it reliably
+ * on this board (pstore/ramoops came back empty after a watchdog reset, see
+ * docs/kexec-oneshot.md), so the generic DRAM backend is unusable. The MT6351
+ * RTC is always-on and already reached over PWRAP for the fastboot-request bit
+ * above, so store the count there: override the weak bootcount_store()/
+ * bootcount_load() that BOOTCOUNT_GENERIC provides. A magic byte in the high
+ * half distinguishes a real count from a cleared or battery-pulled RTC.
+ *
+ * TODO(hw-verify): confirm RTC_SPAR1 (0x32) is free on this unit - dump
+ * PDN1/PDN2/SPAR0/SPAR1 and check that LK/kernel reboot-mode and the RTC alarm
+ * leave it alone (see docs/uboot-boot-fallback.md).
+ */
+#define MT6351_RTC_BOOTCOUNT	0x4032	/* RTC base + RTC_SPAR1 (0x32) */
+#define RTC_BOOTCOUNT_MAGIC	0xbc00	/* high byte; low byte holds the count */
+#define RTC_BOOTCOUNT_MASK	0x00ff
+
+void bootcount_store(ulong a)
+{
+	struct udevice *pmic = gemini_pmic();
+
+	if (!pmic)
+		return;
+
+	if (a > RTC_BOOTCOUNT_MASK)
+		a = RTC_BOOTCOUNT_MASK;
+
+	if (pmic_reg_write(pmic, MT6351_RTC_BOOTCOUNT,
+			   RTC_BOOTCOUNT_MAGIC | (a & RTC_BOOTCOUNT_MASK)) ||
+	    gemini_rtc_commit(pmic))
+		printf("bootcount: RTC store failed\n");
+}
+
+ulong bootcount_load(void)
+{
+	struct udevice *pmic = gemini_pmic();
+	int val;
+
+	if (!pmic)
+		return 0;
+
+	val = pmic_reg_read(pmic, MT6351_RTC_BOOTCOUNT);
+	if (val < 0 || (val & ~RTC_BOOTCOUNT_MASK) != RTC_BOOTCOUNT_MAGIC)
+		return 0;	/* cleared, battery-pulled or never written */
+
+	return val & RTC_BOOTCOUNT_MASK;
+}
+
+/*
+ * Reset the streak on any reset that is NOT a watchdog timeout: a cold
+ * power-on, a clean reboot and a fastboot reboot all mean the previous boot did
+ * not hang, so the count starts over. Only consecutive watchdog resets - the
+ * signature of a kernel that hangs before it can pet the RGU - accumulate
+ * towards "bootlimit". The TOPRGU status latch holds the last reset cause
+ * across the reset.
+ *
+ * TODO(hw-verify): confirm the preloader/LK leave WDT_STATUS latched until this
+ * runs, and the HW/SW-WDT bit positions. If the status is always clear here the
+ * count is only ever reset (a safe no-op) and must instead be cleared from
+ * Linux once userspace is healthy - see docs/uboot-boot-fallback.md.
+ */
+#define MT6797_TOPRGU_STATUS	(0x10007000 + 0x0c)
+#define WDT_STATUS_WDT_RST	(BIT(31) | BIT(30))	/* HW | SW watchdog */
+
+static bool gemini_last_reset_was_wdt(void)
+{
+	return !!(readl((void __iomem *)MT6797_TOPRGU_STATUS) &
+		  WDT_STATUS_WDT_RST);
+}
+
+static void gemini_bootcount_init(void)
+{
+	if (!env_get("bootlimit"))
+		env_set("bootlimit", "3");
+	if (!env_get("altbootcmd"))
+		env_set("altbootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
+
+	if (!gemini_last_reset_was_wdt())
+		bootcount_store(0);
+}
+#endif /* CONFIG_BOOTCOUNT_LIMIT */
+
 /*
  * Enter fastboot instead of autobooting when "reboot bootloader" requested it,
  * so remote reflash/test cycles need no physical interaction. Read the RTC
@@ -411,6 +505,10 @@ int board_late_init(void)
 	gemini_charger_init();
 
 	gemini_check_fastboot_request();
+
+#if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
+	gemini_bootcount_init();
+#endif
 
 	gemini_wait_keys_released();
 

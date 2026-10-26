@@ -1,4 +1,4 @@
-u-boot-gemini-simplefb (2026.10.2+twostage.TWOSTAGE_SHA) unstable; urgency=medium
+u-boot-gemini-simplefb (2026.10.2+twostage.fdbdffa43e8) unstable; urgency=medium
 
   * Two-stage boot. Stage 1 (flashed once into the write-protected "boot"
     partition) chainloads a verified stage-2 U-Boot from

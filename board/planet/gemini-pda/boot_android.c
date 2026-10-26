@@ -27,7 +27,7 @@
  * LK's memory reservations and /memory are added by the normal boot fdt fixup
  * (ft_board_setup() copies the reservations from gd->fdt_blob; arch_fixup_fdt()
  * writes /memory from bi_dram), the same path the Linux boot uses. The two
- * Linux-only fixups (maxcpus=8, simple-framebuffer) are skipped for Android via
+ * Linux-only fixups (A72 power-on, simple-framebuffer) are skipped for Android via
  * gemini_booting_android - see arch/arm/mach-mediatek/mt6797/init.c.
  */
 
@@ -48,7 +48,7 @@ DECLARE_GLOBAL_DATA_PTR;
 
 /*
  * Env flag set across the booti call so ft_board_setup() skips the Linux-only
- * DT fixups (maxcpus=8, simple-framebuffer) for the stock Android kernel. See
+ * DT fixups (A72 power-on, simple-framebuffer) for the stock Android kernel. See
  * arch/arm/mach-mediatek/mt6797/init.c.
  */
 #define GEMINI_ANDROID_FLAG	"gemini_android"

@@ -12,7 +12,7 @@
  * Split into this header so a host-side self-check can exercise the pure FDT
  * copy without the U-Boot plumbing. See board/planet/gemini-pda/
  * reservations_test.c. Relies on the includer for libfdt, string.h and the
- * uint64_t/bool types (as ram_top.h / maxcpus.h do).
+ * uint64_t/bool types (as ram_top.h does).
  */
 
 #ifndef __MT6797_RESERVATIONS_H

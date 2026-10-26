@@ -27,8 +27,8 @@
 #include <linux/delay.h>
 #include <linux/libfdt.h>
 #include <linux/sizes.h>
+#include <linux/string.h>
 
-#include "maxcpus.h"
 #include "ram_top.h"
 #include "reservations.h"
 
@@ -279,27 +279,29 @@ static int gemini_cl2_power_on(void)
 }
 
 /*
- * Append " maxcpus=8" to /chosen/bootargs, keeping the A72 cores offline. Used
- * both when the user set no maxcpus token and when a requested A72 power-on
- * failed: a later maxcpus= overrides an earlier one (the kernel parses left to
- * right), so appending 8 caps a user "maxcpus=10" back to the A53s.
+ * Mark the Cortex-A72 cores (cpu@200/@201) "disabled" in the kernel FDT. Used
+ * only when the cluster power-on failed: the cores are then unpowered and a
+ * plain PSCI CPU_ON of them would hang the SoC, so take them out of play in
+ * the DT itself (Linux does not register a cpu node that is not available)
+ * instead of parsing or injecting a maxcpus= cmdline token. Matched by
+ * compatible so it tracks the DT rather than a hard-coded path; the nodes are
+ * re-scanned from the root after each edit because fdt_setprop grows the blob
+ * in place and shifts later offsets.
  */
-static int gemini_append_maxcpus8(void *blob, int chosen, const char *old)
+static void gemini_disable_a72_cores(void *blob)
 {
-	char args[CONFIG_SYS_CBSIZE];
-	int ret;
+	int node = -1;
 
-	ret = snprintf(args, sizeof(args), "%s%smaxcpus=8",
-		       old ?: "", old ? " " : "");
-	/* Never truncate the user's bootargs to fit ours. */
-	if (ret >= sizeof(args))
-		ret = -FDT_ERR_NOSPACE;
-	else
-		ret = fdt_setprop_string(blob, chosen, "bootargs", args);
-	if (ret < 0)
-		printf("gemini: failed to set maxcpus bootarg (%d)\n", ret);
+	while ((node = fdt_node_offset_by_compatible(blob, node,
+						     "arm,cortex-a72")) >= 0) {
+		const char *st = fdt_getprop(blob, node, "status", NULL);
 
-	return ret;
+		if (st && !strcmp(st, "disabled"))
+			continue;	/* already done, keep scanning forward */
+		if (fdt_setprop_string(blob, node, "status", "disabled"))
+			break;
+		node = -1;		/* offsets shifted; restart the scan */
+	}
 }
 
 /*
@@ -311,28 +313,25 @@ static int gemini_append_maxcpus8(void *blob, int chosen, const char *old)
  * not reuse memory LK (or its secure world) still owns. U-Boot fixes up
  * /memory itself.
  *
- * Also handle the A72 cores (cpu@200/@201, i.e. CPU8/9). They are off at
- * kernel entry; a plain PSCI CPU_ON of an unpowered A72 hangs the SoC, so:
- *   - maxcpus absent or <= 8: keep them offline (append maxcpus=8 if absent);
- *   - maxcpus > 8: the user wants the A72s, so run the power-on sequence here,
- *     and only if it succeeds leave the bootargs so Linux brings them up.
- *     On any failure cap maxcpus back to 8 so Linux never CPU_ONs them.
- * fdt_chosen() has already written the extlinux "append" line into
- * /chosen/bootargs by the time image_setup_libfdt() calls us.
+ * Also prepare the A72 cores (cpu@200/@201, i.e. CPU8/9). They are off at
+ * kernel entry; a plain PSCI CPU_ON of an unpowered A72 hangs the SoC. U-Boot
+ * owns the boot before Linux, so always run the cluster power-on here and
+ * leave the kernel command line untouched, so all ten CPUs come up with a
+ * plain cmdline (no maxcpus/nr_cpus needed). Only if the power-on fails do we
+ * disable the A72 cpu nodes in the DT so Linux never CPU_ONs an unpowered
+ * core - gated on the real power-on result, not on a cmdline token.
  */
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const void *lk = gd->fdt_blob;
-	const char *old;
 	int ret, chosen;
-	long maxcpus;
 
 	ret = gemini_copy_reservations(blob, lk);
 	if (ret < 0)
 		return ret;
 
 	/* The stock Android kernel gets LK's /chosen and its own framebuffer
-	 * handling; only the Linux boot needs the maxcpus fixup. The
+	 * handling; only the Linux boot needs the A72/simplefb fixups. The
 	 * "boot_android" command sets this env flag across its booti call.
 	 */
 	if (env_get("gemini_android"))
@@ -372,29 +371,19 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 	if (ret)
 		printf("gemini: simple-framebuffer fixup skipped (%d)\n", ret);
 
-	chosen = fdt_path_offset(blob, "/chosen");
-	if (chosen < 0)
-		return 0;
-
-	old = fdt_getprop(blob, chosen, "bootargs", NULL);
-	maxcpus = gemini_bootargs_maxcpus_value(old);
-
-	if (maxcpus > 8) {
-		ret = gemini_cl2_power_on();
-		if (ret) {
-			printf("gemini: Cortex-A72 power-on failed (%d), capping maxcpus=8\n",
-			       ret);
-			gemini_append_maxcpus8(blob, chosen, old);
-		} else {
-			printf("gemini: Cortex-A72 cluster powered on (maxcpus=%ld)\n",
-			       maxcpus);
-		}
-		return 0;
+	/*
+	 * Power on the Cortex-A72 cluster so Linux can online all ten CPUs from
+	 * a plain command line. On failure the cores are unpowered, so disable
+	 * them in the DT rather than let Linux CPU_ON an unpowered core.
+	 */
+	ret = gemini_cl2_power_on();
+	if (ret) {
+		printf("gemini: Cortex-A72 power-on failed (%d), disabling the A72 cores\n",
+		       ret);
+		gemini_disable_a72_cores(blob);
+	} else {
+		printf("gemini: Cortex-A72 cluster powered on\n");
 	}
-
-	/* No A72 requested: append our default only if the user set none. */
-	if (maxcpus < 0)
-		gemini_append_maxcpus8(blob, chosen, old);
 
 	return 0;
 }

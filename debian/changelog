@@ -1,10 +1,11 @@
-u-boot-gemini-simplefb (2026.10+bootfallback.de8d21c4d25) unstable; urgency=medium
+u-boot-gemini-simplefb (2026.10.1+bootfallback.d3585b753b7) unstable; urgency=medium
 
   * Always power on the Cortex-A72 cluster and stop injecting maxcpus into
     the kernel command line; all ten CPUs now come up with a plain cmdline.
-    On a power-on failure the A72 cpu nodes are disabled in the DT instead.
+    On a power-on failure the A72 cpu nodes are marked "fail" in the DT so
+    Linux skips them.
 
- -- realni <ant@ict4.cz>  Sun, 26 Oct 2026 20:00:00 +0000
+ -- realni <ant@ict4.cz>  Mon, 26 Oct 2026 20:00:00 +0000
 
 u-boot-gemini-simplefb (2026.10+bootfallback.f3e24215628) unstable; urgency=medium
 

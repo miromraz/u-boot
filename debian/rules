@@ -6,7 +6,7 @@ PKGDIR = debian/u-boot-gemini-simplefb/usr/lib/u-boot-gemini
 	dh $@
 override_dh_auto_configure:
 	$(MAKE) O=$(BUILD) gemini-pda_defconfig
-	echo 'CONFIG_IDENT_STRING=" gemini-bootfallback de8d21c4d25"' >> $(BUILD)/.config
+	echo 'CONFIG_IDENT_STRING=" gemini-bootfallback d3585b753b7"' >> $(BUILD)/.config
 	$(MAKE) O=$(BUILD) olddefconfig
 override_dh_auto_build:
 	$(MAKE) O=$(BUILD)

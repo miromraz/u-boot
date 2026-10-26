@@ -56,3 +56,25 @@ image, which retained an Android ramdisk.
 Still required: temporary boot on the target, EFI discovery from prepared
 userdata, menu and USB recovery tests, and an explicit tested boot-slot
 installation/recovery procedure. This record does not certify an installer.
+
+## Subsequent generic and handset builds
+
+Source `74ef2f79e147bd728a409a9fbe500d44b18cb49a` was built on `llumik` with
+GCC 14 for target and host. The generic configuration and the configuration
+with `sunfish-handset.config` both passed. Their compiled default environments
+were extracted and matched against the corresponding source env files.
+Each build still emitted the three host utility warnings listed above.
+
+| Android boot image | Bytes | SHA256 |
+| --- | --- | --- |
+| Generic, `userdata` | 622592 | `cd84cbaa9dc6a2acf9574e94e9d797c3ef32b405dcca1ff85de34b795cf9c897` |
+| Maintainer handset, `linux` | 622592 | `0fa4065cbbde822260a19520e9a31da234f85f7b479fd86c9a2cc73f057dab94` |
+
+The handset menu's helper path is `/EFI/sunfish/slotflip.efi`. Both helper
+payloads were built off-phone with the matching GCC 14 kernel and ARM64
+Debian runtime. PE machine, embedded kernel, command lines and legacy root
+copies were checked; eight mocked-device tests passed. The exact kernel and
+helper checksums are in the companion
+[packaged release record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-release-20261026.md).
+Phone access was deferred by the user, so no deployment, probe boot, Android
+transition, return/recovery or hardware validation is claimed.

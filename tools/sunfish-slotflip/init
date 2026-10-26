@@ -1,0 +1,39 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0+
+# Tiny initramfs for the maintainer handset. No rootfs or ESP write is needed.
+/bin/busybox --install -s /bin
+export PATH=/bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+say() { echo "<2>slotflip: $*" >/dev/kmsg; echo "slotflip: $*" >/dev/console; }
+. /policy.sh
+
+mode=
+for word in $(cat /proc/cmdline); do
+	case $word in slotflip=b|slotflip=test) mode=${word#slotflip=} ;; esac
+done
+
+# qbootctl needs the slotted partitions. Build only links reported by sysfs.
+i=0
+while [ "$i" -lt 30 ]; do
+	if grep -qx 'PARTNAME=boot_b' /sys/class/block/*/uevent 2>/dev/null; then break; fi
+	sleep 1
+	i=$((i + 1))
+done
+mkdir -p /dev/disk/by-partlabel
+for event in /sys/class/block/*/uevent; do
+	name=$(sed -n 's/^PARTNAME=//p' "$event")
+	device=$(sed -n 's/^DEVNAME=//p' "$event")
+	[ -n "$name" ] && [ -n "$device" ] && ln -sf "../../$device" "/dev/disk/by-partlabel/$name"
+done
+
+if slotflip_apply "$mode"; then say 'Policy completed'; else say 'No successful slot switch'; fi
+sync
+reboot -f
+sleep 3
+say 'Reboot failed; trying sysrq'
+echo 1 >/proc/sys/kernel/sysrq
+echo b >/proc/sysrq-trigger
+# PID 1 must never exit. Physical power recovery is required if both fail.
+while :; do sleep 60; done

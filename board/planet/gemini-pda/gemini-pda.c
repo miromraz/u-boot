@@ -148,7 +148,9 @@ void board_quiesce_devices(void)
 		mdelay(50);
 	}
 
-	if (env_get("gemini_android"))
+	/* Keep the live display scanning out for the stock Android kernel and
+	 * for a stage-2 U-Boot chainload (both manage the display themselves). */
+	if (env_get("gemini_android") || env_get("gemini_chainload"))
 		return;
 
 	writel(0, (void __iomem *)0x1401f020);	/* DISP MUTEX0_EN = 0 */
@@ -379,17 +381,17 @@ static void gemini_bootcount_init(void)
  * read-back confirms the bit is gone - otherwise a stuck bit would trap every
  * boot in fastboot.
  */
-static void gemini_check_fastboot_request(void)
+static bool gemini_check_fastboot_request(void)
 {
 	struct udevice *pmic = gemini_pmic();
 	int pdn1;
 
 	if (!pmic)
-		return;
+		return false;
 
 	pdn1 = pmic_reg_read(pmic, MT6351_RTC_PDN1);
 	if (pdn1 < 0 || !(pdn1 & RTC_PDN1_FASTBOOT))
-		return;
+		return false;
 
 	if (pmic_reg_write(pmic, MT6351_RTC_PDN1, pdn1 & ~RTC_PDN1_FASTBOOT) ||
 	    gemini_rtc_commit(pmic))
@@ -398,13 +400,14 @@ static void gemini_check_fastboot_request(void)
 	pdn1 = pmic_reg_read(pmic, MT6351_RTC_PDN1);
 	if (pdn1 < 0 || (pdn1 & RTC_PDN1_FASTBOOT)) {
 		printf("fastboot: RTC FAST_BOOT still set, booting normally\n");
-		return;
+		return false;
 	}
 
 	printf("fastboot requested -> entering fastboot\n");
 	/* Keep CONFIG_BOOTCOMMAND after it so leaving fastboot (Ctrl-C /
 	 * "fastboot continue") falls through to a normal boot, not a prompt. */
 	env_set("bootcmd", "fastboot usb 0; " CONFIG_BOOTCOMMAND);
+	return true;
 }
 
 /*
@@ -479,8 +482,14 @@ static void gemini_charger_init(void)
  * serial# from the eMMC CID (device 0) so it is unique per unit and stable
  * across boots. Only set what is not already defined in the environment.
  */
+#if IS_ENABLED(CONFIG_GEMINI_CHAINLOAD)
+void gemini_chainload(void);	/* board/planet/gemini-pda/chainload.c */
+#endif
+
 int board_late_init(void)
 {
+	bool fastboot_req;
+
 	if (!env_get("board"))
 		env_set("board", CONFIG_SYS_BOARD);
 
@@ -499,13 +508,27 @@ int board_late_init(void)
 
 	gemini_charger_init();
 
-	gemini_check_fastboot_request();
+	fastboot_req = gemini_check_fastboot_request();
 
 #if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
 	gemini_bootcount_init();
 #endif
 
 	gemini_wait_keys_released();
+
+#if IS_ENABLED(CONFIG_GEMINI_CHAINLOAD)
+	/*
+	 * Chainload a verified stage-2 U-Boot from the linux partition before
+	 * the normal bootmenu, unless fastboot was requested or a key is still
+	 * held (so the user can stay in stage 1). gemini_wait_keys_released()
+	 * above has already drained the transient LK power-on hold, so a key
+	 * read here is a deliberate press. gemini_chainload() returns on any
+	 * failure, falling through to the normal boot.
+	 */
+	if (!fastboot_req && !gemini_key_held("pwrkey") &&
+	    !gemini_key_held("homekey"))
+		gemini_chainload();
+#endif
 
 	return 0;
 }

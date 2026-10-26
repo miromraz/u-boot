@@ -11,8 +11,10 @@ Package: u-boot-gemini-simplefb
 Architecture: arm64
 Depends: ${misc:Depends}
 Description: U-Boot for the Planet Gemini PDA (MediaTek MT6797)
- Built natively on aarch64 (no cross compiler) from the gemini-simplefb-cells
- branch: enables the kernel simple-framebuffer at boot and declares the /chosen
- cells before the simplefb fixup. Ships the raw u-boot.bin, the LK-compatible
- Android boot image u-boot-gemini-boot.img and the DTB under
- /usr/lib/u-boot-gemini/.
+ Built natively on aarch64 (no cross compiler) from the gemini-two-stage
+ branch. One build yields two images: stage 1 (u-boot-gemini-boot.img), flashed
+ once into the write-protected "boot" partition and carrying the early
+ chainloader, and stage 2 (u-boot-gemini-stage2.img, chainload disabled) plus
+ its sha256 digest, which stage 1 loads from /boot/u-boot/ on the "linux"
+ partition so U-Boot can be updated by a plain file write. Also ships the raw
+ u-boot.bin and the DTB under /usr/lib/u-boot-gemini/.

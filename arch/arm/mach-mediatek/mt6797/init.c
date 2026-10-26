@@ -342,6 +342,15 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 	const void *lk = gd->fdt_blob;
 	int ret, chosen;
 
+	/*
+	 * Stage-2 U-Boot chainload (chainload.c): the "blob" is already a
+	 * verbatim copy of LK's control FDT, so its reservations are present and
+	 * no Linux-only fixup applies. Hand it over untouched - re-copying the
+	 * reservations onto a copy of themselves would only duplicate them.
+	 */
+	if (env_get("gemini_chainload"))
+		return 0;
+
 	ret = gemini_copy_reservations(blob, lk);
 	if (ret < 0)
 		return ret;

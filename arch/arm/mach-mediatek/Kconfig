@@ -234,4 +234,17 @@ config MTK_TZ_MOVABLE
 config LNX_KRNL_IMG_TEXT_OFFSET_BASE
 	default 0x40000000 if TARGET_MT6797
 
+config GEMINI_CHAINLOAD
+	bool "Gemini PDA two-stage boot (chainload stage 2 from the linux part)"
+	depends on TARGET_MT6797
+	select SHA256
+	help
+	  Before the normal bootmenu, try to load a verified stage-2 U-Boot
+	  Android boot image from /boot/u-boot/u-boot-stage2.img on the eMMC
+	  "linux" partition and boot it, so the frozen, write-protected "boot"
+	  U-Boot (stage 1) can be updated by plain file writes. The stage-2
+	  build leaves this disabled, which removes the chainload code and is
+	  the loop guard that stops stage 2 chainloading again. See
+	  board/planet/gemini-pda/chainload.c and docs/uboot-two-stage.md.
+
 endif

@@ -1,21 +1,40 @@
 #!/usr/bin/make -f
 export CROSS_COMPILE =
 BUILD = build-gemini
+BUILD2 = build-gemini-stage2
 PKGDIR = debian/u-boot-gemini-simplefb/usr/lib/u-boot-gemini
+MKBOOTIMG = MKBOOTIMG=$(CURDIR)/debian/mkbootimg-shim \
+	sh ./board/planet/gemini-pda/mkbootimg.sh
+# Banner/ident: stage 1 is flashed to "boot"; stage 2 is the same tree built
+# with the chainload disabled (loop guard) and shipped as a file.
+IDENT1 = " gemini-two-stage TWOSTAGE_SHA"
+IDENT2 = " gemini-two-stage TWOSTAGE_SHA stage2"
 %:
 	dh $@
 override_dh_auto_configure:
+	# stage 1 (flashed to "boot"): chainload enabled via the defconfig
 	$(MAKE) O=$(BUILD) gemini-pda_defconfig
-	echo 'CONFIG_IDENT_STRING=" gemini-bootfallback d3585b753b7"' >> $(BUILD)/.config
+	echo 'CONFIG_IDENT_STRING=$(IDENT1)' >> $(BUILD)/.config
 	$(MAKE) O=$(BUILD) olddefconfig
+	# stage 2 (shipped as a file): same config, chainload disabled
+	$(MAKE) O=$(BUILD2) gemini-pda_defconfig
+	./scripts/config --file $(BUILD2)/.config --disable GEMINI_CHAINLOAD
+	echo 'CONFIG_IDENT_STRING=$(IDENT2)' >> $(BUILD2)/.config
+	$(MAKE) O=$(BUILD2) olddefconfig
 override_dh_auto_build:
 	$(MAKE) O=$(BUILD)
-	MKBOOTIMG=$(CURDIR)/debian/mkbootimg-shim \
-		sh ./board/planet/gemini-pda/mkbootimg.sh $(BUILD)
+	$(MKBOOTIMG) $(BUILD)
+	$(MAKE) O=$(BUILD2)
+	$(MKBOOTIMG) $(BUILD2)
 override_dh_auto_install:
 	install -D -m0644 $(BUILD)/u-boot.bin $(PKGDIR)/u-boot.bin
 	install -D -m0644 $(BUILD)/u-boot-gemini-boot.img $(PKGDIR)/u-boot-gemini-boot.img
 	install -D -m0644 $(BUILD)/arch/arm/dts/mt6797-gemini-pda.dtb $(PKGDIR)/mt6797-gemini-pda.dtb
+	# stage-2 image + its bare sha256 digest; stage 1 verifies this digest
+	# before chainloading (board/planet/gemini-pda/chainload.c).
+	install -D -m0644 $(BUILD2)/u-boot-gemini-boot.img $(PKGDIR)/u-boot-gemini-stage2.img
+	cd $(PKGDIR) && sha256sum u-boot-gemini-stage2.img | awk '{print $$1}' \
+		> u-boot-gemini-stage2.img.sha256
 override_dh_auto_test:
 override_dh_auto_clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) $(BUILD2)

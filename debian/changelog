@@ -1,3 +1,15 @@
+u-boot-gemini-simplefb (2026.10.2+twostage.TWOSTAGE_SHA) unstable; urgency=medium
+
+  * Two-stage boot. Stage 1 (flashed once into the write-protected "boot"
+    partition) chainloads a verified stage-2 U-Boot from
+    /boot/u-boot/u-boot-stage2.img on the "linux" partition before the
+    bootmenu, so U-Boot updates become plain file writes. The stage-2 image is
+    built from the same tree with the chainload disabled (loop guard) and
+    shipped alongside with its sha256 digest. Any failure or a held key falls
+    back to stage 1 (bootmenu, bootfallback, fastboot, extlinux).
+
+ -- realni <ant@ict4.cz>  Tue, 27 Oct 2026 12:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10.1+bootfallback.d3585b753b7) unstable; urgency=medium
 
   * Always power on the Cortex-A72 cluster and stop injecting maxcpus into

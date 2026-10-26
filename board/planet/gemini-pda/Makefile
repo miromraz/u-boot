@@ -3,3 +3,4 @@
 obj-y += gemini-pda.o
 obj-$(CONFIG_FASTBOOT) += fastboot.o
 obj-$(CONFIG_CMD_BOOTI) += boot_android.o
+obj-$(CONFIG_GEMINI_CHAINLOAD) += chainload.o

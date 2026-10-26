@@ -241,24 +241,32 @@ static int gemini_cl2_power_on(void)
 	writel((readl(MT6797_TOPRGU_SWSYSRST) | MT6797_PWRAP_SPI_RST) |
 	       MT6797_TOPRGU_KEY, MT6797_TOPRGU_SWSYSRST);
 
-	/* 4) set VBUCKB to 1.00 V, enable buck B, settle 1 ms. */
+	/* 4) set VBUCKB to 1.00 V, enable buck B, settle 1 ms. On a failure
+	 * here the PWRAP-SPI reset latched in step 3 is still held, so route
+	 * through the step-6 release instead of returning early.
+	 */
 	ret = dm_i2c_reg_write(dev, DA9214_VBUCKB_A, DA9214_VBUCKB_1V00);
 	if (ret)
-		return ret;
+		goto release_pwrap;
 	ret = dm_i2c_reg_write(dev, DA9214_BUCKB_CONT, DA9214_BUCKB_EN);
 	if (ret)
-		return ret;
+		goto release_pwrap;
 	udelay(1000);
 
 	/* 5) clear the B external-buck isolation. */
 	writel(readl(MT6797_SPM_CL2_EXT_BUCK_ISO) & ~0x3u,
 	       MT6797_SPM_CL2_EXT_BUCK_ISO);
 
-	/* 6) unlatch the PWRAP reset. */
+release_pwrap:
+	/* 6) unlatch the PWRAP reset (always, so a failure after step 3 does
+	 * not leave the SPI line held in reset).
+	 */
 	writel((readl(MT6797_TOPRGU_SWSYSRST) & ~MT6797_PWRAP_SPI_RST) |
 	       MT6797_TOPRGU_KEY, MT6797_TOPRGU_SWSYSRST);
 	writel(readl(MT6797_TOPRGU_SWSYSRST_EN) & ~MT6797_PWRAP_SPI_RST,
 	       MT6797_TOPRGU_SWSYSRST_EN);
+	if (ret)
+		return ret;
 
 	/* 7) set the B SRAM LDO to 1.10 V via the iDVFS SIP, 240 us each side.
 	 * The SIP's return convention is undocumented and the vendor path does
@@ -279,14 +287,17 @@ static int gemini_cl2_power_on(void)
 }
 
 /*
- * Mark the Cortex-A72 cores (cpu@200/@201) "disabled" in the kernel FDT. Used
- * only when the cluster power-on failed: the cores are then unpowered and a
- * plain PSCI CPU_ON of them would hang the SoC, so take them out of play in
- * the DT itself (Linux does not register a cpu node that is not available)
- * instead of parsing or injecting a maxcpus= cmdline token. Matched by
- * compatible so it tracks the DT rather than a hard-coded path; the nodes are
- * re-scanned from the root after each edit because fdt_setprop grows the blob
- * in place and shifts later offsets.
+ * Mark the Cortex-A72 cores (cpu@200/@201) "fail" in the kernel FDT. Used only
+ * when the cluster power-on failed: the cores are then unpowered and a plain
+ * PSCI CPU_ON of them would hang the SoC, so take them out of play in the DT
+ * itself instead of parsing or injecting a maxcpus= cmdline token. The status
+ * must be "fail" (not "disabled"): arm64 of_get_next_cpu_node() only skips a
+ * cpu node whose status is "fail"/"fail-..." - a "disabled" cpu is still
+ * counted and onlined. A cpu-map referencing the now-failed cores is tolerated
+ * (arch_topology.c parse_core). Matched by compatible so it tracks the DT
+ * rather than a hard-coded path; the nodes are re-scanned from the root after
+ * each edit because fdt_setprop grows the blob in place and shifts later
+ * offsets.
  */
 static void gemini_disable_a72_cores(void *blob)
 {
@@ -295,11 +306,16 @@ static void gemini_disable_a72_cores(void *blob)
 	while ((node = fdt_node_offset_by_compatible(blob, node,
 						     "arm,cortex-a72")) >= 0) {
 		const char *st = fdt_getprop(blob, node, "status", NULL);
+		int ret;
 
-		if (st && !strcmp(st, "disabled"))
+		if (st && !strcmp(st, "fail"))
 			continue;	/* already done, keep scanning forward */
-		if (fdt_setprop_string(blob, node, "status", "disabled"))
+		ret = fdt_setprop_string(blob, node, "status", "fail");
+		if (ret) {
+			printf("gemini: failed to disable an A72 cpu node (%d)\n",
+			       ret);
 			break;
+		}
 		node = -1;		/* offsets shifted; restart the scan */
 	}
 }

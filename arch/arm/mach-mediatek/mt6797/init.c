@@ -424,11 +424,21 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 	chosen = fdt_path_offset(blob, "/chosen");
 	if (chosen >= 0) {
 		const char *args = fdt_getprop(blob, chosen, "bootargs", NULL);
-		char buf[512];
+		char buf[1024];
+		int n;
 
-		snprintf(buf, sizeof(buf), "%s%sgemini_stage=2",
-			 args ? args : "", (args && *args) ? " " : "");
-		fdt_setprop_string(blob, chosen, "bootargs", buf);
+		/*
+		 * Never truncate the existing command line (that could silently drop a
+		 * deadman token or the marker itself). snprintf() returns the length it
+		 * would have needed; on overflow leave bootargs untouched and shout.
+		 */
+		n = snprintf(buf, sizeof(buf), "%s%sgemini_stage=2",
+			     args ? args : "", (args && *args) ? " " : "");
+		if (n < 0 || n >= (int)sizeof(buf))
+			printf("gemini: bootargs too long (%d B), stage-2 marker NOT added\n",
+			       n);
+		else
+			fdt_setprop_string(blob, chosen, "bootargs", buf);
 	}
 #endif
 

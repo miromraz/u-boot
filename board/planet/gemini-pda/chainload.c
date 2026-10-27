@@ -228,14 +228,16 @@ void gemini_chainload(void)
 	 * resets (the mtk_wdt driver data sets AUTO_RESTART, so the reset is not
 	 * gated on the power key). With CONFIG_WATCHDOG the running U-Boot services
 	 * it through the cyclic framework, so an idle fastboot is fine but a true
-	 * hang resets. ~30 s matches oneshot.sh's deadman and leaves the kernel time
-	 * to take the watchdog over.
+	 * hang resets. 15 s is within the mtk_wdt range (the driver clamps anything
+	 * above ~16 s) and leaves the kernel time to take the watchdog over.
 	 */
 	{
 		struct udevice *wdt;
 
 		if (!uclass_first_device_err(UCLASS_WDT, &wdt))
-			wdt_start(wdt, 30000, 0);
+			wdt_start(wdt, 15000, 0);
+		else
+			printf("stage2: no WDT device, chainloading without a hang guard\n");
 	}
 #endif
 

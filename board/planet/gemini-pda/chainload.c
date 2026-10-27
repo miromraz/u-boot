@@ -37,12 +37,14 @@
 #include <blk.h>
 #include <bootcount.h>
 #include <command.h>
+#include <dm.h>
 #include <env.h>
 #include <fs.h>
 #include <gzip.h>
 #include <mapmem.h>
 #include <part.h>
 #include <vsprintf.h>
+#include <wdt.h>
 #include <asm/global_data.h>
 #include <linux/libfdt.h>
 #include <linux/string.h>
@@ -197,10 +199,44 @@ void gemini_chainload(void)
 	env_set("gemini_chainload", "1");
 
 #if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
-	/* Count this chainload attempt before handing over (see the loop guard
-	 * at the top): a stage 2 that hangs before Linux clears the counter can
-	 * then only loop up to "bootlimit" times before stage 1 drops to fastboot. */
-	bootcount_store(bootcount_load() + 1);
+	/*
+	 * Count this chainload attempt before handing over (see the loop guard at
+	 * the top): a stage 2 that hangs before Linux clears the counter then loops
+	 * only up to "bootlimit" times before stage 1 drops to fastboot. Read the
+	 * value back - the counter lives behind the PMIC/RTC and bootcount_load()/
+	 * _store() fail open (load returns 0, store only warns), so if the write did
+	 * not stick the count can never climb and the guard could never fire. A
+	 * failed store therefore aborts the chainload: stage 1 is the safe place to
+	 * stay.
+	 */
+	{
+		ulong bc = bootcount_load();
+
+		bootcount_store(bc + 1);
+		if (bootcount_load() != bc + 1) {
+			printf("stage2: bootcount not persisted (PMIC/RTC?), not chainloading\n");
+			env_set("gemini_chainload", NULL);
+			return;
+		}
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_WDT)
+	/*
+	 * Arm the RGU watchdog across the hand-over. Nothing kicks it once we jump,
+	 * so a stage 2 that hangs before it re-arms/services the WDT itself still
+	 * resets (the mtk_wdt driver data sets AUTO_RESTART, so the reset is not
+	 * gated on the power key). With CONFIG_WATCHDOG the running U-Boot services
+	 * it through the cyclic framework, so an idle fastboot is fine but a true
+	 * hang resets. ~30 s matches oneshot.sh's deadman and leaves the kernel time
+	 * to take the watchdog over.
+	 */
+	{
+		struct udevice *wdt;
+
+		if (!uclass_first_device_err(UCLASS_WDT, &wdt))
+			wdt_start(wdt, 30000, 0);
+	}
 #endif
 
 	snprintf(cmd, sizeof(cmd), "booti 0x%lx - 0x%lx", kaddr, faddr);
@@ -209,11 +245,14 @@ void gemini_chainload(void)
 	run_command(cmd, 0);
 
 	/*
-	 * Reached only if booti returned after relocating over U-Boot's own
-	 * memory: stage 1 cannot safely resume on possibly-clobbered RAM. Reset
-	 * instead of continuing the normal boot. The bootcount above is already
-	 * incremented, so a persistent failure trips the loop guard on the next
-	 * pass and lands in fastboot rather than looping here.
+	 * Reached only if booti returned. U-Boot relocates itself to the top of
+	 * usable DRAM at init (board_get_usable_ram_top() in mt6797/init.c returns
+	 * ram_base + ram_size minus the reservations, so gd->relocaddr sits near the
+	 * top), while booti's Image lands in low RAM (kernel_addr_r 0x48000000 and
+	 * down); the running stage-1 code, stack and heap are therefore not
+	 * clobbered, so do_reset() here is safe. Reset rather than resume the normal
+	 * boot: the bootcount above is already incremented, so a persistent failure
+	 * trips the loop guard on the next pass and lands in fastboot.
 	 */
 	printf("stage2: chainload returned, resetting\n");
 	do_reset(NULL, 0, 0, NULL);

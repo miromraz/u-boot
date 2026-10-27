@@ -410,5 +410,27 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		printf("gemini: Cortex-A72 cluster powered on\n");
 	}
 
+#if !IS_ENABLED(CONFIG_GEMINI_CHAINLOAD)
+	/*
+	 * Stage-2 discriminator. This image is the chainload-disabled "stage 2";
+	 * tag the kernel command line so a prove-chainload test can confirm from
+	 * /proc/cmdline that the stage-1 chainload actually ran (stage 1, built with
+	 * the chainload enabled, never adds this), rather than a silent fall-through
+	 * to stage 1 booting Linux directly. fdt_chosen() has already written
+	 * "bootargs" into the blob by now, so append to it. The exact stage-2 build
+	 * is identified out of band by its sha256 (install-uboot-stage2.sh) and the
+	 * banner ident; see docs/uboot-two-stage.md.
+	 */
+	chosen = fdt_path_offset(blob, "/chosen");
+	if (chosen >= 0) {
+		const char *args = fdt_getprop(blob, chosen, "bootargs", NULL);
+		char buf[512];
+
+		snprintf(buf, sizeof(buf), "%s%sgemini_stage=2",
+			 args ? args : "", (args && *args) ? " " : "");
+		fdt_setprop_string(blob, chosen, "bootargs", buf);
+	}
+#endif
+
 	return 0;
 }

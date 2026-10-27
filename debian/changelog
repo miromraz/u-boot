@@ -1,3 +1,13 @@
+u-boot-gemini-simplefb (2026.10.2+twostage.b251f3fdc07) unstable; urgency=medium
+
+  * Fix the stage-2 chainload reading the wrong partition (the "linux" index was
+    formatted decimal but the dev:part parser reads it as hex), which made the
+    chainload silently fall through on hardware. Add gemini_stage=/gemini_id=/
+    gemini_chainload=<reason> kernel-cmdline diagnostics so /proc/cmdline shows
+    which stage booted and why a chainload was skipped (no UART on this board).
+
+ -- realni <ant@ict4.cz>  Mon, 27 Oct 2026 19:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10.2+twostage.b2971e26575) unstable; urgency=medium
 
   * Review round 3: request a 15 s stage-1 watchdog arm (mtk_wdt clamps to

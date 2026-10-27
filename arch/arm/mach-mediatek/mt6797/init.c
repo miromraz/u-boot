@@ -337,6 +337,52 @@ static void gemini_disable_a72_cores(void *blob)
  * disable the A72 cpu nodes in the DT so Linux never CPU_ONs an unpowered
  * core - gated on the real power-on result, not on a cmdline token.
  */
+
+/*
+ * Append a token string to /chosen/bootargs, overflow-safe: on overflow leave
+ * bootargs untouched and shout rather than silently truncate (which could drop
+ * a deadman token or a marker). fdt_chosen() has already written bootargs by
+ * the time ft_board_setup() runs, so this extends it.
+ */
+static void gemini_append_cmdline(void *blob, const char *extra)
+{
+	int chosen = fdt_path_offset(blob, "/chosen");
+	const char *args;
+	char buf[1024];
+	int n;
+
+	if (chosen < 0)
+		return;
+	args = fdt_getprop(blob, chosen, "bootargs", NULL);
+	n = snprintf(buf, sizeof(buf), "%s%s%s", args ? args : "",
+		     (args && *args) ? " " : "", extra);
+	if (n < 0 || n >= (int)sizeof(buf))
+		printf("gemini: bootargs too long (%d B), '%s' NOT added\n",
+		       n, extra);
+	else
+		fdt_setprop_string(blob, chosen, "bootargs", buf);
+}
+
+/*
+ * A cmdline-safe short build id: the sha token of CONFIG_IDENT_STRING
+ * (" gemini-two-stage <sha>[ stage2]"), so /proc/cmdline identifies which
+ * U-Boot build is running. Empty if the ident is not in that form.
+ */
+static void gemini_build_id(char *out, int n)
+{
+	const char *p = strstr(CONFIG_IDENT_STRING, "gemini-two-stage ");
+	int i = 0;
+
+	if (p) {
+		p += strlen("gemini-two-stage ");
+		while (p[i] && p[i] != ' ' && i < n - 1) {
+			out[i] = p[i];
+			i++;
+		}
+	}
+	out[i] = '\0';
+}
+
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	const void *lk = gd->fdt_blob;
@@ -410,37 +456,33 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		printf("gemini: Cortex-A72 cluster powered on\n");
 	}
 
-#if !IS_ENABLED(CONFIG_GEMINI_CHAINLOAD)
 	/*
-	 * Stage-2 discriminator. This image is the chainload-disabled "stage 2";
-	 * tag the kernel command line so a prove-chainload test can confirm from
-	 * /proc/cmdline that the stage-1 chainload actually ran (stage 1, built with
-	 * the chainload enabled, never adds this), rather than a silent fall-through
-	 * to stage 1 booting Linux directly. fdt_chosen() has already written
-	 * "bootargs" into the blob by now, so append to it. The exact stage-2 build
-	 * is identified out of band by its sha256 (install-uboot-stage2.sh) and the
-	 * banner ident; see docs/uboot-two-stage.md.
+	 * Mark the kernel command line so Linux /proc/cmdline shows which stage
+	 * booted it (no UART on this board). Stage 2 (chainload disabled) tags
+	 * gemini_stage=2. Stage 1 (chainload enabled) reaches here only when it
+	 * booted Linux directly - i.e. the chainload was skipped - so it tags
+	 * gemini_stage=1 plus the skip reason recorded in gemini_cl_reason by
+	 * gemini_chainload(). Either way a short build id identifies the image.
+	 * See docs/uboot-two-stage.md.
 	 */
-	chosen = fdt_path_offset(blob, "/chosen");
-	if (chosen >= 0) {
-		const char *args = fdt_getprop(blob, chosen, "bootargs", NULL);
-		char buf[1024];
-		int n;
+	{
+		char id[16], mark[96];
 
-		/*
-		 * Never truncate the existing command line (that could silently drop a
-		 * deadman token or the marker itself). snprintf() returns the length it
-		 * would have needed; on overflow leave bootargs untouched and shout.
-		 */
-		n = snprintf(buf, sizeof(buf), "%s%sgemini_stage=2",
-			     args ? args : "", (args && *args) ? " " : "");
-		if (n < 0 || n >= (int)sizeof(buf))
-			printf("gemini: bootargs too long (%d B), stage-2 marker NOT added\n",
-			       n);
-		else
-			fdt_setprop_string(blob, chosen, "bootargs", buf);
-	}
+		gemini_build_id(id, sizeof(id));
+#if IS_ENABLED(CONFIG_GEMINI_CHAINLOAD)
+		{
+			const char *reason = env_get("gemini_cl_reason");
+
+			snprintf(mark, sizeof(mark),
+				 "gemini_stage=1 gemini_id=%s%s%s", id,
+				 reason ? " gemini_chainload=" : "",
+				 reason ? reason : "");
+		}
+#else
+		snprintf(mark, sizeof(mark), "gemini_stage=2 gemini_id=%s", id);
 #endif
+		gemini_append_cmdline(blob, mark);
+	}
 
 	return 0;
 }

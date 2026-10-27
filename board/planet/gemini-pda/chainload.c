@@ -35,6 +35,7 @@
 
 #include <android_image.h>
 #include <blk.h>
+#include <bootcount.h>
 #include <command.h>
 #include <env.h>
 #include <fs.h>
@@ -116,6 +117,23 @@ void gemini_chainload(void)
 	const u8 *kern;
 	int idx;
 
+#if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
+	/*
+	 * Loop guard. A stage-2 image can pass the sha256 check yet hang before
+	 * Linux clears the boot counter; the LK watchdog then resets the SoC and
+	 * stage 1 would chainload the same image again, forever. autoboot's
+	 * bootcount_inc() runs only in main_loop, which a successful chainload
+	 * never reaches, so count each chainload attempt here instead (just
+	 * before booti below). Once the count exceeds "bootlimit", stop
+	 * chainloading and fall through to stage 1's own boot - whose main_loop
+	 * then selects altbootcmd (fastboot) via its own bootcount_error(). The
+	 * counter is reset by Linux clearing the RTC bootcount nvmem cell once a
+	 * boot reaches userspace, so normal boots never trip this.
+	 */
+	if (bootcount_error())
+		return;
+#endif
+
 	desc = blk_get_devnum_by_uclass_id(UCLASS_MMC, 0);
 	if (!desc)
 		return;
@@ -178,12 +196,25 @@ void gemini_chainload(void)
 	/* Skip the Linux-only DT fixups and the display quiesce for this jump. */
 	env_set("gemini_chainload", "1");
 
+#if IS_ENABLED(CONFIG_BOOTCOUNT_LIMIT)
+	/* Count this chainload attempt before handing over (see the loop guard
+	 * at the top): a stage 2 that hangs before Linux clears the counter can
+	 * then only loop up to "bootlimit" times before stage 1 drops to fastboot. */
+	bootcount_store(bootcount_load() + 1);
+#endif
+
 	snprintf(cmd, sizeof(cmd), "booti 0x%lx - 0x%lx", kaddr, faddr);
 	printf("stage2: %s verified (%llu B), chainloading\n",
 	       STAGE2_IMG, (unsigned long long)sz);
 	run_command(cmd, 0);
 
-	/* Reached only if booti returned (it should not). */
-	env_set("gemini_chainload", NULL);
-	printf("stage2: chainload returned, continuing stage 1\n");
+	/*
+	 * Reached only if booti returned after relocating over U-Boot's own
+	 * memory: stage 1 cannot safely resume on possibly-clobbered RAM. Reset
+	 * instead of continuing the normal boot. The bootcount above is already
+	 * incremented, so a persistent failure trips the loop guard on the next
+	 * pass and lands in fastboot rather than looping here.
+	 */
+	printf("stage2: chainload returned, resetting\n");
+	do_reset(NULL, 0, 0, NULL);
 }

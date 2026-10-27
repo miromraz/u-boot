@@ -7,8 +7,8 @@ MKBOOTIMG = MKBOOTIMG=$(CURDIR)/debian/mkbootimg-shim \
 	sh ./board/planet/gemini-pda/mkbootimg.sh
 # Banner/ident: stage 1 is flashed to "boot"; stage 2 is the same tree built
 # with the chainload disabled (loop guard) and shipped as a file.
-IDENT1 = " gemini-two-stage fdbdffa43e8"
-IDENT2 = " gemini-two-stage fdbdffa43e8 stage2"
+IDENT1 = " gemini-two-stage 2e40f8aaed7"
+IDENT2 = " gemini-two-stage 2e40f8aaed7 stage2"
 %:
 	dh $@
 override_dh_auto_configure:

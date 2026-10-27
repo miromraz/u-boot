@@ -1,3 +1,12 @@
+u-boot-gemini-simplefb (2026.10.2+twostage.2e40f8aaed7) unstable; urgency=medium
+
+  * Loop guard for the stage-2 chainload: count each chainload attempt against
+    "bootlimit" and drop to fastboot once exceeded, so a stage 2 that hangs
+    before Linux clears the RTC boot counter can no longer loop forever. Reset
+    rather than resume stage 1 if booti ever returns after relocation.
+
+ -- realni <ant@ict4.cz>  Mon, 27 Oct 2026 13:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10.2+twostage.fdbdffa43e8) unstable; urgency=medium
 
   * Two-stage boot. Stage 1 (flashed once into the write-protected "boot"

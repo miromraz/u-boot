@@ -1,3 +1,12 @@
+u-boot-gemini-simplefb (2026.10.2+twostage.b2971e26575) unstable; urgency=medium
+
+  * Review round 3: request a 15 s stage-1 watchdog arm (mtk_wdt clamps to
+    ~16 s; the prior "30 s" could not be honoured), log when no WDT device is
+    present instead of skipping silently, and stop the stage-2 cmdline marker
+    from silently truncating long bootargs.
+
+ -- realni <ant@ict4.cz>  Mon, 27 Oct 2026 17:00:00 +0000
+
 u-boot-gemini-simplefb (2026.10.2+twostage.74977014574) unstable; urgency=medium
 
   * Stage-2 chainload hardening (review round 2): arm the RGU watchdog before

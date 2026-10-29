@@ -71,8 +71,16 @@ The tests do not call real boot control. They cover successful operation,
 failure to mark A, failure to select B, invalid inputs, the no-write probe,
 missing EFI loads, and standard cpio compatibility.
 
-The phone must still validate probe boot/return, the Android transition,
-the return from Android, menu and USB recovery. Android's own boot policy
+On 2026-10-29, the canonical helpers and identical root compatibility copies were
+installed on the maintainer handset. The no-write probe was selected once through
+the EFI loader and returned automatically to the preserved Linux system.
+Boot-control metadata and both boot partitions retained their pre-probe hashes.
+The console policy message was not captured, so this does not establish the
+Android transition or exercise a physical U-Boot menu selection. See the
+[hardware record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).
+
+The phone must still validate the Android transition, return from Android and
+physical menu selection. Android's own boot policy
 determines whether it returns to A on reboot; this helper does not install
 an Android-side return policy. Preserve a known-good A boot image and an
 independent ABL recovery path until those tests pass.

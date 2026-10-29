@@ -1,6 +1,7 @@
 # Pixel 4a U-Boot build record, 2026-10-26
 
-Status: **build and packaging verified; hardware boot not tested**.
+Historical build record. The initial generic image below was build/packaging
+verified only; subsequent handset evidence is recorded at the end of this file.
 
 The build ran in a disposable Debian sid container on `llumik`, with an
 AArch64 GCC 14 cross compiler and host GCC 16. No build or test ran on `dev`.
@@ -76,5 +77,20 @@ Debian runtime. PE machine, embedded kernel, command lines and legacy root
 copies were checked; eight mocked-device tests passed. The exact kernel and
 helper checksums are in the companion
 [packaged release record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-release-20261026.md).
-Phone access was deferred by the user, so no deployment, probe boot, Android
-transition, return/recovery or hardware validation is claimed.
+
+## Handset verification, 2026-10-29
+
+The handset image with SHA256 `0fa4065cbbde822260a19520e9a31da234f85f7b479fd86c9a2cc73f057dab94`
+was RAM-launched through ABL fastboot and booted the preserved Linux system.
+The installed boot partitions were not flashed. USB mass-storage recovery was
+exercised through the existing installed U-Boot after an unrelated trial Linux
+image failed its filesystem-label validation.
+
+The canonical slot-flip helpers and matching legacy copies were installed and
+hash-checked. A one-attempt EFI entry selected the no-write probe and returned to
+the working Linux system. Boot-control metadata and both boot partitions retained
+their original hashes. The probe's console policy outcome was not captured.
+Android transition/return, physical Android-menu selection and a stock-userdata
+recipient installation remain unverified. The companion kernel's exact build-ID,
+hardware and recovery results are in the
+[2026-10-29 verification record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).

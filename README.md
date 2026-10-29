@@ -1,6 +1,6 @@
 # U-Boot for the Google Pixel 4a (sunfish)
 
-Developer handoff, 2026-10-26. This branch documents the SM7150 Tauchgang
+Developer handoff, updated 2026-10-29. This branch documents the SM7150 Tauchgang
 bootloader baseline used for the Pixel 4a port. It is a source handoff,
 not a verified installer for a stock phone.
 
@@ -57,7 +57,10 @@ to omit the input filename and timestamp from the compressed stream.
 A fresh GCC 14 build and Android boot-image packaging passed on `llumik` on
 2026-10-26 for both generic and handset profiles, including extraction and
 verification of their compiled environments. Each build emitted three
-host-tool const-qualification warnings. No hardware boot test was performed. See the
+host-tool const-qualification warnings. On 2026-10-29 the handset image was
+RAM-launched through ABL and booted the preserved Linux system; installed boot
+partitions were not flashed. The generic stock-userdata image remains untested
+on a recipient handset. See the
 [build record](doc/board/qualcomm/sunfish-build-20261026.md). In the maintainer's
 environment, builds run on `llumik`, never on the `dev` host.
 
@@ -83,15 +86,17 @@ The new handset entry loads **`/EFI/sunfish/slotflip.efi`** from the nested
 Linux ESP and stops with a message if loading fails. The separate
 [off-phone helper builder](tools/sunfish-slotflip/README.md) creates this payload,
 a no-write probe, and root-path compatibility copies for the old flashed
-bootloader. The old phone notes report a missing helper; new payloads have
-now been built, but installation and hardware tests are deferred until the
-phone is online. Android's return-to-A policy remains a separate hardware
-validation step.
+bootloader. Both paths were installed and hash-checked on 2026-10-29. A counted
+no-write probe returned automatically to the preserved Linux system, with unchanged
+boot-control metadata and boot partitions. Its console policy result was not
+captured, and no Android slot switch was performed. Android menu selection and
+return-to-A policy remain separate hardware validation steps. See the
+[handset verification record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).
 
 ## Known limits and next work
 
-1. Validate the handset helper's no-write probe before testing its Android
-   transition. Preserve existing boot and EFI state first.
+1. Capture the helper's policy outcome and validate its Android transition.
+   Preserve the existing boot and EFI backups and a recovery path.
 2. Verify the return from Android and independent ABL/USB recovery. The helper
    does not install an Android-side return policy.
 3. Record the full source and toolchain identities with each image; the current

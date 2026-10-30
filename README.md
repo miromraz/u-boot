@@ -58,8 +58,10 @@ A fresh GCC 14 build and Android boot-image packaging passed on `llumik` on
 2026-10-26 for both generic and handset profiles, including extraction and
 verification of their compiled environments. Each build emitted three
 host-tool const-qualification warnings. On 2026-10-29 the handset image was
-RAM-launched through ABL and booted the preserved Linux system; installed boot
-partitions were not flashed. The generic stock-userdata image remains untested
+RAM-launched through ABL and booted the preserved Linux system. On 2026-10-30
+it was written to the maintainer handset's `boot_a`, boots Linux, and its Android
+entry completed a round trip to slot B and back. The generic stock-userdata
+image remains untested
 on a recipient handset. See the
 [build record](doc/board/qualcomm/sunfish-build-20261026.md). In the maintainer's
 environment, builds run on `llumik`, never on the `dev` host.
@@ -89,16 +91,20 @@ a no-write probe, and root-path compatibility copies for the old flashed
 bootloader. Both paths were installed and hash-checked on 2026-10-29. A counted
 no-write probe returned automatically to the preserved Linux system, with unchanged
 boot-control metadata and boot partitions. Its console policy result was not
-captured, and no Android slot switch was performed. Android menu selection and
-return-to-A policy remain separate hardware validation steps. See the
+captured, and no Android slot switch was performed. On 2026-10-30, with this
+U-Boot installed in `boot_a`, a one-shot `BootNext` to the helper (no keypress)
+booted LineageOS on slot B; a maintainer-installed Android module selected A again
+and `adb reboot` returned to Linux. The physical menu keypress is still untested.
+See the [round-trip record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md#u-boot-installation-and-android-round-trip-2026-10-30) and the
 [handset verification record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).
 
 ## Known limits and next work
 
-1. Capture the helper's policy outcome and validate its Android transition.
-   Preserve the existing boot and EFI backups and a recovery path.
-2. Verify the return from Android and independent ABL/USB recovery. The helper
-   does not install an Android-side return policy.
+1. Test the physical Android menu keypress. The helper itself was validated
+   through `BootNext` on 2026-10-30.
+2. Provide an Android-side return policy for recipients. The helper does not
+   install one; without it Android keeps booting slot B until fastboot
+   `--set-active=a`.
 3. Record the full source and toolchain identities with each image; the current
    packaging tool is pinned and the handoff build has a checksum.
 4. Validate boot/menu/USB recovery on hardware before publishing images as

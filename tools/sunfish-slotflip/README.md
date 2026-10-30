@@ -79,11 +79,16 @@ The console policy message was not captured, so this does not establish the
 Android transition or exercise a physical U-Boot menu selection. See the
 [hardware record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).
 
-The phone must still validate the Android transition, return from Android and
-physical menu selection. Android's own boot policy
+On 2026-10-30, with the handset U-Boot installed in `boot_a`, a one-shot
+`BootNext` to the root copy of `slotflip.efi` (identical to the canonical one)
+booted LineageOS on slot B. A maintainer-installed Magisk module selected A again,
+and `adb reboot` returned to Linux with both slots successful. See the
+[round-trip record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md#u-boot-installation-and-android-round-trip-2026-10-30).
+
+The physical menu keypress is still untested. Android's own boot policy
 determines whether it returns to A on reboot; this helper does not install
 an Android-side return policy. Preserve a known-good A boot image and an
-independent ABL recovery path until those tests pass.
+independent ABL recovery path.
 
 qbootctl is the separate [linux-msm/qbootctl](https://github.com/linux-msm/qbootctl)
 project. No qbootctl or firmware binaries are embedded in this source tree.

@@ -102,6 +102,6 @@ ABL fastboot, after saving the previous `boot_a`. `boot_b` and `misc` were not
 written. The flash kept the previous header's ramdisk size, OS version and command line
 while writing the new kernel payload and image ID; the image boots regardless.
 Linux booted through it, and its Android helper completed a slot-B round trip
-through a one-shot `BootNext`. The physical menu keypress and a stock-userdata
-recipient installation remain unverified. Details are in the
+through a one-shot `BootNext` and again from a physical menu selection. A
+stock-userdata recipient installation remains unverified. Details are in the
 [round-trip record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md#u-boot-installation-and-android-round-trip-2026-10-30).

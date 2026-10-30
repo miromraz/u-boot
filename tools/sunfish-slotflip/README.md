@@ -85,7 +85,8 @@ booted LineageOS on slot B. A maintainer-installed Magisk module selected A agai
 and `adb reboot` returned to Linux with both slots successful. See the
 [round-trip record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md#u-boot-installation-and-android-round-trip-2026-10-30).
 
-The physical menu keypress is still untested. Android's own boot policy
+Selecting "Android (slot B)" by hand in the menu then gave the same round trip.
+Android's own boot policy
 determines whether it returns to A on reboot; this helper does not install
 an Android-side return policy. Preserve a known-good A boot image and an
 independent ABL recovery path.

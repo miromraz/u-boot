@@ -94,20 +94,19 @@ boot-control metadata and boot partitions. Its console policy result was not
 captured, and no Android slot switch was performed. On 2026-10-30, with this
 U-Boot installed in `boot_a`, a one-shot `BootNext` to the helper (no keypress)
 booted LineageOS on slot B; a maintainer-installed Android module selected A again
-and `adb reboot` returned to Linux. The physical menu keypress is still untested.
+and `adb reboot` returned to Linux. Selecting the entry by hand in the menu then
+gave the same round trip.
 See the [round-trip record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md#u-boot-installation-and-android-round-trip-2026-10-30) and the
 [handset verification record](https://github.com/miromraz/linux/blob/sunfish-share/Documentation/arm64/sunfish-verification-20261029.md).
 
 ## Known limits and next work
 
-1. Test the physical Android menu keypress. The helper itself was validated
-   through `BootNext` on 2026-10-30.
-2. Provide an Android-side return policy for recipients. The helper does not
+1. Provide an Android-side return policy for recipients. The helper does not
    install one; without it Android keeps booting slot B until fastboot
    `--set-active=a`.
-3. Record the full source and toolchain identities with each image; the current
+2. Record the full source and toolchain identities with each image; the current
    packaging tool is pinned and the handoff build has a checksum.
-4. Validate boot/menu/USB recovery on hardware before publishing images as
+3. Validate boot/menu/USB recovery on hardware before publishing images as
    tested. A successful build and valid image header do not prove bootability.
 
 An unlocked device, a known recovery path and a device-specific partition
